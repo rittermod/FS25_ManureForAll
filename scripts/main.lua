@@ -33,6 +33,8 @@ Log:setLevel(RmLogging.LOG_LEVEL.INFO) -- Set to DEBUG/TRACE for development
 source(modDirectory .. "scripts/core/RmManureShared.lua")
 source(modDirectory .. "scripts/core/RmManureRatios.lua")
 source(modDirectory .. "scripts/core/RmCurveInjector.lua")
+source(modDirectory .. "scripts/core/RmSpecInjector.lua")
+source(modDirectory .. "scripts/core/RmStrawSink.lua")
 source(modDirectory .. "scripts/console/RmManureConsole.lua")
 
 -- =============================================================================

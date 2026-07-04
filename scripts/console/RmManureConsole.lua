@@ -23,8 +23,9 @@ local Log = RmLogging.getLogger("ManureForAll")
 local DUMP_SUBCOMMANDS = { curves = true, sinks = true, heaps = true }
 
 ---mfaDump [curves|sinks|heaps] [name]: dump migrated state for a domain.
---- `curves` delegates to RmCurveInjector.dumpCurves (slice 1); `sinks`/`heaps`
---- stay "not yet migrated" placeholders until their slices; missing/unknown
+--- `curves` delegates to RmCurveInjector.dumpCurves (slice 1); `sinks` delegates to
+--- RmStrawSink.dumpSinks (slice 2), RETURNING its string for the console to print;
+--- `heaps` stays a "not yet migrated" placeholder until its slice; missing/unknown
 --- subcommand -> usage line. Args beyond `[name]` are ignored. Never errors on a
 --- nil arg.
 ---@param subcommand string|nil
@@ -33,18 +34,23 @@ local DUMP_SUBCOMMANDS = { curves = true, sinks = true, heaps = true }
 function RmManureConsole:consoleDump(subcommand, name)
     if subcommand == "curves" then
         return RmCurveInjector.dumpCurves(name)
+    elseif subcommand == "sinks" then
+        return RmStrawSink.dumpSinks()
     elseif subcommand ~= nil and DUMP_SUBCOMMANDS[subcommand] then
-        Log:info("mfaDump %s: not yet migrated", subcommand)
+        Log:info("mfaDump %s: not yet migrated", subcommand) -- heaps: slice 4
     else
         Log:info("Usage: mfaDump curves|sinks|heaps [name]")
     end
 end
 
 ---mfaAddStraw [liters] [index]: deposit STRAW on a wired husbandry.
---- Placeholder until slice 2; args are ignored (per-arg validation lands with the
---- real subcommand). Never errors on missing args.
-function RmManureConsole:consoleAddStraw()
-    Log:info("mfaAddStraw: not yet migrated")
+--- Thin dispatcher: delegates to RmStrawSink.addStraw (bodies + validation live there)
+--- and RETURNS its string for the console to print. Never errors on missing args.
+---@param litersArg string|nil deposit liters (default 1000; finite positive; fractional ok)
+---@param indexArg string|nil optional 1-based dump-ordinal target (fan-out to all if omitted)
+---@return string message console-return string
+function RmManureConsole:consoleAddStraw(litersArg, indexArg)
+    return RmStrawSink.addStraw(litersArg, indexArg)
 end
 
 -- =============================================================================
