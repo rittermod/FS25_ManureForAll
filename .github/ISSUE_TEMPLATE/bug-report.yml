@@ -1,0 +1,100 @@
+name: Bug Report
+description: Report a bug or issue
+labels: ["Bug"]
+body:
+  - type: input
+    id: mod-version
+    attributes:
+      label: Mod Version
+      description: Which version of the mod are you using?
+      placeholder: "1.0.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: game-version
+    attributes:
+      label: Game Version
+      description: Which version of Farming Simulator 2025?
+      placeholder: "1.9.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: game-mode
+    attributes:
+      label: Game Mode
+      options:
+        - Singleplayer
+        - Multiplayer (hosting)
+        - Multiplayer (client)
+        - Multiplayer (dedicated server)
+    validations:
+      required: true
+
+  - type: input
+    id: map
+    attributes:
+      label: Map
+      description: Which map are you playing on?
+      placeholder: "Riverbend Springs"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: Feature Area
+      description: Which part of the mod is affected?
+      options:
+        - "TODO: Add feature areas for your mod"
+        - Not feature-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Load savegame
+        2. Do something
+        3. See error
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log File
+      description: |
+        Please paste relevant lines from your `log.txt` file.
+        Location: `Documents/My Games/FarmingSimulator2025/log.txt`
+      render: text
+
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other Mods
+      description: List any other mods you have installed that might be relevant.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Add screenshots if helpful.

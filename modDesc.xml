@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="106">
+    <author>Ritter</author>
+    <version>1.0.0.0</version>
+    <title>
+        <en>Manure For All</en>
+    </title>
+    <description>
+        <en><![CDATA[
+Make every animal husbandry produce collectable manure.
+
+Features:
+- Feature 1
+- Feature 2
+
+Changelog:
+1.0.0.0:
+- Initial release
+        ]]></en>
+    </description>
+
+    <iconFilename>icon_manureForAll.dds</iconFilename>
+    <multiplayer supported="true"/>
+
+    <!-- Optional: Inline localization (for simple mods) -->
+    <!-- <l10n>
+        <text name="manureForAll_action">
+            <en>Action Name</en>
+        </text>
+    </l10n> -->
+
+    <!-- Optional: External localization files (for complex mods) -->
+    <!-- <l10n filenamePrefix="languages/l10n"/> -->
+
+    <extraSourceFiles>
+        <sourceFile filename="scripts/main.lua"/>
+    </extraSourceFiles>
+
+    <!-- Optional: Input bindings -->
+    <!-- <actions>
+        <action name="{{ACTION_NAME}}" category="MENU" axisType="HALF" ignoreComboMask="true"/>
+    </actions>
+    <inputBinding>
+        <actionBinding action="{{ACTION_NAME}}">
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_{{key}}" index="1"/>
+        </actionBinding>
+    </inputBinding> -->
+</modDesc>

@@ -1,0 +1,24 @@
+name: Question
+description: Ask a question about the mod
+labels: ["Question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest! Please check the README first for common questions.
+
+  - type: checkboxes
+    id: docs-checked
+    attributes:
+      label: Documentation
+      options:
+        - label: I have checked the README
+          required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+    validations:
+      required: true
