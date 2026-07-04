@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="106">
     <author>Ritter</author>
-    <version>1.0.0.0</version>
+    <version>0.1.0.0</version>
     <title>
         <en>Manure For All</en>
     </title>
@@ -14,9 +14,9 @@ Features:
 - Feature 2
 
 Changelog:
-1.0.0.0:
+0.1.0.0:
 - Initial release
-        ]]></en>
+        ]]>        </en>
     </description>
 
     <iconFilename>icon_manureForAll.dds</iconFilename>
