@@ -30,7 +30,7 @@ Log:setLevel(RmLogging.LOG_LEVEL.INFO) -- Set to DEBUG/TRACE for development
 -- OPTIONAL: NETWORK EVENTS (uncomment as needed)
 -- =============================================================================
 
--- source(modDirectory .. "scripts/events/RmManureForAllSyncEvent.lua")
+source(modDirectory .. "scripts/events/RmManureForAllSyncEvent.lua")
 
 -- =============================================================================
 -- CORE

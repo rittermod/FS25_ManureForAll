@@ -47,7 +47,12 @@ body:
       label: Feature Area
       description: Which part of the mod is affected?
       options:
-        - "TODO: Add feature areas for your mod"
+        - Manure production
+        - Straw intake / feeding
+        - Manure collection / storage
+        - Animal type support
+        - Multiplayer
+        - Settings / configuration
         - Not feature-specific
     validations:
       required: true
