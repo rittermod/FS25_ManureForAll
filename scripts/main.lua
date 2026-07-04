@@ -27,10 +27,12 @@ local Log = RmLogging.getLogger("ManureForAll")
 Log:setLevel(RmLogging.LOG_LEVEL.INFO) -- Set to DEBUG/TRACE for development
 
 -- =============================================================================
--- SHARED + CONSOLE (loaded before the main module)
+-- SHARED + CORE + CONSOLE (loaded before the main module)
 -- =============================================================================
 
 source(modDirectory .. "scripts/core/RmManureShared.lua")
+source(modDirectory .. "scripts/core/RmManureRatios.lua")
+source(modDirectory .. "scripts/core/RmCurveInjector.lua")
 source(modDirectory .. "scripts/console/RmManureConsole.lua")
 
 -- =============================================================================

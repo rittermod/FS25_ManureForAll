@@ -23,11 +23,17 @@ local Log = RmLogging.getLogger("ManureForAll")
 local DUMP_SUBCOMMANDS = { curves = true, sinks = true, heaps = true }
 
 ---mfaDump [curves|sinks|heaps] [name]: dump migrated state for a domain.
---- Known subcommand -> "not yet migrated" placeholder (further args ignored);
---- missing/unknown subcommand -> usage line. Never errors on a nil arg.
+--- `curves` delegates to RmCurveInjector.dumpCurves (slice 1); `sinks`/`heaps`
+--- stay "not yet migrated" placeholders until their slices; missing/unknown
+--- subcommand -> usage line. Args beyond `[name]` are ignored. Never errors on a
+--- nil arg.
 ---@param subcommand string|nil
-function RmManureConsole:consoleDump(subcommand)
-    if subcommand ~= nil and DUMP_SUBCOMMANDS[subcommand] then
+---@param name string|nil optional subType-or-type name for `curves`
+---@return string|nil message console-return string when a subcommand produces one
+function RmManureConsole:consoleDump(subcommand, name)
+    if subcommand == "curves" then
+        return RmCurveInjector.dumpCurves(name)
+    elseif subcommand ~= nil and DUMP_SUBCOMMANDS[subcommand] then
         Log:info("mfaDump %s: not yet migrated", subcommand)
     else
         Log:info("Usage: mfaDump curves|sinks|heaps [name]")
