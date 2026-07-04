@@ -7,13 +7,11 @@
     This file is loaded by scripts/main.lua.
 
     Author: Ritter
-    Version: 1.0.0.0
 
     ARCHITECTURE:
     - Module declaration and state management
     - Game lifecycle hooks (loadMapFinished, delete, saveSavegame)
     - Core business logic
-    - For multiplayer mods, add sync events in scripts/events/
 ]]
 
 -- Module declaration
@@ -87,26 +85,6 @@ BaseMission.delete = Utils.appendedFunction(
 -- FSBaseMission.saveSavegame = Utils.appendedFunction(
 --     FSBaseMission.saveSavegame,
 --     onSaveSavegame
--- )
-
--- ============================================================================
--- OPTIONAL: Multiplayer sync
--- ============================================================================
-
--- For multiplayer support, implement:
--- 1. Copy _templates/scripts/events/RmSyncEvent.lua to scripts/events/
--- 2. Rename and customize the sync event
--- 3. Uncomment loading in main.lua
--- 4. Hook into FSBaseMission.sendInitialClientState for late-join sync:
-
--- function RmManureForAll:sendInitialClientState(connection, user, farm)
---     if g_server ~= nil and connection ~= nil then
---         connection:sendEvent(RmManureForAllSyncEvent.new(data))
---     end
--- end
--- FSBaseMission.sendInitialClientState = Utils.appendedFunction(
---     FSBaseMission.sendInitialClientState,
---     RmManureForAll.sendInitialClientState
 -- )
 
 -- ============================================================================

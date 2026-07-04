@@ -27,13 +27,14 @@ local Log = RmLogging.getLogger("ManureForAll")
 Log:setLevel(RmLogging.LOG_LEVEL.INFO) -- Set to DEBUG/TRACE for development
 
 -- =============================================================================
--- OPTIONAL: NETWORK EVENTS (uncomment as needed)
+-- SHARED + CONSOLE (loaded before the main module)
 -- =============================================================================
 
-source(modDirectory .. "scripts/events/RmManureForAllSyncEvent.lua")
+source(modDirectory .. "scripts/core/RmManureShared.lua")
+source(modDirectory .. "scripts/console/RmManureConsole.lua")
 
 -- =============================================================================
--- CORE
+-- MAIN MODULE
 -- =============================================================================
 
 source(modDirectory .. "scripts/RmManureForAll.lua")
