@@ -36,6 +36,7 @@ source(modDirectory .. "scripts/core/RmCurveInjector.lua")
 source(modDirectory .. "scripts/core/RmSpecInjector.lua")
 source(modDirectory .. "scripts/core/RmStrawSink.lua")
 source(modDirectory .. "scripts/core/RmTroughDivert.lua")
+source(modDirectory .. "scripts/core/RmHeapConnector.lua")
 source(modDirectory .. "scripts/console/RmManureConsole.lua")
 
 -- =============================================================================

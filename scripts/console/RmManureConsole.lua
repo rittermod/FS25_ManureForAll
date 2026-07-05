@@ -19,15 +19,11 @@ RmManureConsole.registered = false
 
 local Log = RmLogging.getLogger("ManureForAll")
 
--- Recognised mfaDump subcommands (subcommand bodies land in slices 1-4).
-local DUMP_SUBCOMMANDS = { curves = true, sinks = true, heaps = true }
-
 ---mfaDump [curves|sinks|heaps] [name]: dump migrated state for a domain.
 --- `curves` delegates to RmCurveInjector.dumpCurves (slice 1); `sinks` delegates to
---- RmStrawSink.dumpSinks (slice 2), RETURNING its string for the console to print;
---- `heaps` stays a "not yet migrated" placeholder until its slice; missing/unknown
---- subcommand -> usage line. Args beyond `[name]` are ignored. Never errors on a
---- nil arg.
+--- RmStrawSink.dumpSinks (slice 2); `heaps` delegates to RmHeapConnector.consoleDump
+--- (slice 4) -- each RETURNING its string for the console to print. Missing/unknown
+--- subcommand -> usage line. Args beyond `[name]` are ignored. Never errors on a nil arg.
 ---@param subcommand string|nil
 ---@param name string|nil optional subType-or-type name for `curves`
 ---@return string|nil message console-return string when a subcommand produces one
@@ -36,8 +32,8 @@ function RmManureConsole:consoleDump(subcommand, name)
         return RmCurveInjector.dumpCurves(name)
     elseif subcommand == "sinks" then
         return RmStrawSink.dumpSinks()
-    elseif subcommand ~= nil and DUMP_SUBCOMMANDS[subcommand] then
-        Log:info("mfaDump %s: not yet migrated", subcommand) -- heaps: slice 4
+    elseif subcommand == "heaps" then
+        return RmHeapConnector.consoleDump()
     else
         Log:info("Usage: mfaDump curves|sinks|heaps [name]")
     end
