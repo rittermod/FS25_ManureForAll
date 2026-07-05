@@ -35,6 +35,7 @@ source(modDirectory .. "scripts/core/RmManureRatios.lua")
 source(modDirectory .. "scripts/core/RmCurveInjector.lua")
 source(modDirectory .. "scripts/core/RmSpecInjector.lua")
 source(modDirectory .. "scripts/core/RmStrawSink.lua")
+source(modDirectory .. "scripts/core/RmTroughDivert.lua")
 source(modDirectory .. "scripts/console/RmManureConsole.lua")
 
 -- =============================================================================
