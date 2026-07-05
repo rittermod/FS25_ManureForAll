@@ -1,7 +1,7 @@
 --[[
     RmCurveInjector.lua
 
-    PHASE 1 -- Animal-IO curve injector (engine glue).
+    Animal-IO curve injector (engine glue).
 
     Some animal subTypes have no `input.straw` / `output.manure` AnimCurve, so
     nothing reads them and no manure is produced (intake and production stay 0).
@@ -25,14 +25,14 @@
     is never streamed. Deterministic per peer (identical mod set, hardcoded K,
     identical food curves), so no sync event.
 
-    Scope: Phase 1 delivers curve PRESENCE + VALUE only. These curves are inert
-    until a later slice attaches the straw spec and a straw source; zero production
-    from Phase 1 alone is EXPECTED.
+    Scope: this module delivers curve PRESENCE + VALUE only. The curves are read
+    once RmSpecInjector attaches the straw spec and RmStrawSink provides the straw
+    store -- injected alone they produce nothing.
 
     The pure ratio tables + `scaledKeyframes`/`kForSubType` live in
     core/RmManureRatios.lua; this module is the in-game glue over AnimCurve /
-    g_currentMission.animalSystem. Console registration belongs to the slice-0
-    console shell (RmManureConsole), which delegates `mfaDump curves` here.
+    g_currentMission.animalSystem. Console registration belongs to the console
+    shell (RmManureConsole), which delegates `mfaDump curves` here.
 
     Author: Ritter
 ]]
@@ -128,7 +128,7 @@ function RmCurveInjector.injectAll()
     end
 
     -- Record this load's outcome so the no-argument `mfaDump curves` summary can
-    -- report what Phase 1 ACTUALLY injected (not merely which subTypes currently have
+    -- report what the injector ACTUALLY injected (not merely which subTypes currently have
     -- both curves, which would also count pre-existing cow/pig/horse and RL animals).
     RmCurveInjector.lastRun = {
         injected = injected,
@@ -137,7 +137,7 @@ function RmCurveInjector.injectAll()
         skippedEmptyFood = skippedEmptyFood,
     }
 
-    Log:info("Phase 1 curve injection: injected=%d, skipped-existing=%d, skipped-no-food=%d, skipped-empty-food=%d",
+    Log:info("Curve injection: injected=%d, skipped-existing=%d, skipped-no-food=%d, skipped-empty-food=%d",
         injected, skippedExisting, skippedNoFood, skippedEmptyFood)
     Log:trace("<<< injectAll")
 end
@@ -217,7 +217,7 @@ function RmCurveInjector.dumpCurves(nameArg)
     end
 
     if nameArg == nil or nameArg == "" then
-        -- Report what Phase 1 ACTUALLY injected on the last load (from injectAll's
+        -- Report what the injector ACTUALLY injected on the last load (from injectAll's
         -- recorded counters), not merely which subTypes currently have both curves --
         -- the latter would also count pre-existing cow/pig/horse and RL animals and
         -- so could not tell "we injected these" from "these were already present".
@@ -259,7 +259,7 @@ end
 --      == nil. Injection is NEVER gated on a first-run/savegame flag -- curves are
 --      runtime-only and MUST be rebuilt on every load (return-to-menu, client join).
 --
--- Console-command registration is NOT done here: it belongs to the slice-0 console
+-- Console-command registration is NOT done here: it belongs to the console
 -- shell (RmManureConsole), which delegates `mfaDump curves` to dumpCurves above.
 -- ============================================================================
 

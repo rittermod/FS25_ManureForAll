@@ -1,7 +1,7 @@
 --[[
     RmManureRatios.lua
 
-    PURE ratios logic for the Phase 1 animal-IO curve injection: the per-subType
+    PURE ratios logic for the animal-IO curve injection: the per-subType
     straw/manure ratio tables (K) plus the two engine-free functions that carry the
     load-bearing branches -- `scaledKeyframes` (scale a food curve + normalize a
     single-keyframe source) and `kForSubType` (subType override -> type default ->

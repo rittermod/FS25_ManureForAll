@@ -24,7 +24,7 @@ local modDirectory = g_currentModDirectory
 
 source(modDirectory .. "scripts/rmlib/RmLogging.lua")
 local Log = RmLogging.getLogger("ManureForAll")
-Log:setLevel(RmLogging.LOG_LEVEL.INFO) -- Set to DEBUG/TRACE for development
+Log:setLevel(RmLogging.LOG_LEVEL.DEBUG) -- Set to DEBUG/TRACE for development
 
 -- =============================================================================
 -- SHARED + CORE + CONSOLE (loaded before the main module)

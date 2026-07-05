@@ -39,7 +39,7 @@
     Applied DETERMINISTICALLY on ALL peers (never server-gated): the trough target exists on
     every peer, the client's discharge prediction reads the wrapped getIsFillTypeAllowed /
     getFreeCapacity, and the authoritative fill runs server-side through the station and
-    replicates via base storage sync. MP verification is the consolidated slice-5 session.
+    replicates via base storage sync (MP-verified: host, client, and dedicated server).
     Bulk straw only (the food trough has no bale trigger). A modded/pasture trough with a
     non-standard shape (no closure target, or zero troughs -> ERROR load state) is skipped by
     the existing guards -- straw intake applies where a compatible bulk food trough exists.

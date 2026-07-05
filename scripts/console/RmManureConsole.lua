@@ -2,10 +2,10 @@
     RmManureConsole.lua
 
     Console dispatcher shell for ManureForAll. Registers the read/write console
-    command family; the real subcommands land with their slices (1-4), so the
-    shell answers "not yet migrated" until then.
+    command family and delegates each subcommand to the module that owns the
+    state (RmCurveInjector, RmStrawSink, RmHeapConnector).
 
-    Self-installs via BaseMission.loadMapFinished / delete (project-context: NOT
+    Self-installs via BaseMission.loadMapFinished / delete (deliberately NOT
     addModEventListener). Commands register only on a SP server; a module-level
     registered flag pairs register/remove.
 
@@ -19,10 +19,10 @@ RmManureConsole.registered = false
 
 local Log = RmLogging.getLogger("ManureForAll")
 
----mfaDump [curves|sinks|heaps] [name]: dump migrated state for a domain.
---- `curves` delegates to RmCurveInjector.dumpCurves (slice 1); `sinks` delegates to
---- RmStrawSink.dumpSinks (slice 2); `heaps` delegates to RmHeapConnector.consoleDump
---- (slice 4) -- each RETURNING its string for the console to print. Missing/unknown
+---mfaDump [curves|sinks|heaps] [name]: dump mod state for a domain.
+--- `curves` delegates to RmCurveInjector.dumpCurves; `sinks` delegates to
+--- RmStrawSink.dumpSinks; `heaps` delegates to RmHeapConnector.consoleDump
+--- -- each RETURNING its string for the console to print. Missing/unknown
 --- subcommand -> usage line. Args beyond `[name]` are ignored. Never errors on a nil arg.
 ---@param subcommand string|nil
 ---@param name string|nil optional subType-or-type name for `curves`

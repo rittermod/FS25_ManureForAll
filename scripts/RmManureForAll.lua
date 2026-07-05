@@ -1,17 +1,13 @@
 --[[
     RmManureForAll.lua
 
-    Main module for ManureForAll mod.
-    Contains all mod logic, state, and game integration hooks.
+    Main module for ManureForAll mod -- thin by design: mod-level lifecycle
+    markers and the version log. The feature logic lives in scripts/core/,
+    each module installing its own hooks when sourced (before this file).
 
     This file is loaded by scripts/main.lua.
 
     Author: Ritter
-
-    ARCHITECTURE:
-    - Module declaration and state management
-    - Game lifecycle hooks (loadMapFinished, delete, saveSavegame)
-    - Core business logic
 ]]
 
 -- Module declaration
@@ -23,83 +19,30 @@ RmManureForAll.modName = g_currentModName
 -- Per-mod logger instance with automatic multiplayer context
 local Log = RmLogging.getLogger("ManureForAll")
 
--- Module constants (use UPPER_SNAKE_CASE, scoped to module)
--- RmManureForAll.SOME_CONSTANT = "value"
-
 -- ============================================================================
--- INITIALIZATION: Lifecycle hooks
+-- Lifecycle markers
 -- ============================================================================
 
----Called when map finishes loading
----This is the main entry point for mod initialization
+---Runs after the core modules' own loadMapFinished appends (they are sourced,
+--- and hooked, before this file), so this log marks map-load work complete.
 local function onLoadMapFinished()
-    Log:info("Map loaded, initializing ManureForAll")
-
-    -- TODO: Add initialization logic here
-    -- Examples:
-    -- - Load configuration from XML
-    -- - Subscribe to message center events
-    -- - Initialize state variables
-    -- - Register console commands
-
-    -- Example: Subscribe to savegame loaded event
-    -- g_messageCenter:subscribe(MessageType.SAVEGAME_LOADED, RmManureForAll.onSavegameLoaded, RmManureForAll)
-
     Log:info("ManureForAll initialization complete")
 end
 
--- Hook into map loading completion
 BaseMission.loadMapFinished = Utils.appendedFunction(
     BaseMission.loadMapFinished,
     onLoadMapFinished
 )
 
--- ============================================================================
--- CLEANUP: Map unload
--- ============================================================================
-
----Called when map is being deleted/unloaded
----Clean up subscriptions, state, and references
+---Map-unload marker; each core module owns its own teardown.
 local function onDeleteMap()
     Log:debug("Cleaning up ManureForAll")
-    -- TODO: Unsubscribe from message center, clear state
 end
 
 BaseMission.delete = Utils.appendedFunction(
     BaseMission.delete,
     onDeleteMap
 )
-
--- ============================================================================
--- OPTIONAL: Save/Load handling
--- ============================================================================
-
----Called when game saves
----Uncomment and implement if your mod needs to save data
--- local function onSaveSavegame()
---     Log:debug("Saving ManureForAll data...")
---     -- TODO: Save mod data to XML/savegame
--- end
-
--- Uncomment to hook into save
--- FSBaseMission.saveSavegame = Utils.appendedFunction(
---     FSBaseMission.saveSavegame,
---     onSaveSavegame
--- )
-
--- ============================================================================
--- CORE FUNCTIONALITY
--- ============================================================================
-
--- TODO: Add your mod's core functions here
--- Follow these conventions:
--- - Public functions: function RmManureForAll:functionName() or RmManureForAll.functionName()
--- - Private/local functions: local function functionName()
--- - Server mutations: always check `if g_server == nil then return end`
-
--- ============================================================================
--- INITIALIZATION COMPLETE
--- ============================================================================
 
 Log:info("ManureForAll mod loaded (v%s)",
     g_modManager:getModByName(RmManureForAll.modName).version)

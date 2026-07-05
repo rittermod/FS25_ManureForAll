@@ -1,7 +1,7 @@
 --[[
     RmSpecInjector.lua
 
-    Slice 2 (type half) -- inject the husbandryStraw specialization onto every
+    The type half of the straw wiring -- inject the husbandryStraw specialization onto every
     strawless food-bearing husbandry TYPE, and own the `injectedTypes` set that is the
     single source of truth aligning inject-, build-, and warn-scope.
 
@@ -116,7 +116,7 @@ end
 -- ============================================================================
 
 ---BaseMission.delete append: RESET the injected-type set on map unload (the engine wipes
---- its registered types too, so the set is per-map). Replaces the PoC's deleteMap reset.
+--- its registered types too, so the set is per-map). Replaces the prototype's deleteMap reset.
 local function onDeleteMap()
     RmSpecInjector.injectedTypes = {}
 end

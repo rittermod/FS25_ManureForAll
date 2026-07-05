@@ -2,8 +2,8 @@
     RmManureShared.lua
 
     Shared home for the ManureForAll marker constant and the STRAW / MANURE
-    fill-type resolver that the migration slices consume. One home replacing the
-    three duplicated PoC copies; callers keep their own failure policy.
+    fill-type resolver that the core modules consume. One shared home so the
+    resolver is never duplicated; callers keep their own failure policy.
 
     Loaded by scripts/main.lua before the console shell and the main module.
 
@@ -51,7 +51,7 @@ end
 ---Resolve the STRAW and MANURE fill-type indices.
 --- Both params are optional and default to the FillType enum / g_fillTypeManager
 --- globals (injectable for tests). Each result is independently nil when its type
---- is unavailable or its two sources disagree. Nil-guarded (PoC idiom): resolves
+--- is unavailable or its two sources disagree. Nil-guarded: resolves
 --- from whichever source exists and never errors, even pre-init.
 ---@param fillTypeEnum table|nil defaults to the global FillType enum
 ---@param fillTypeManager table|nil defaults to g_fillTypeManager

@@ -63,7 +63,7 @@ local DEFAULT_ADD_LITERS = 1000 -- default deposit for `mfaAddStraw`
 -- world position when a heap is placed.
 local STORAGE_RADIUS = 100
 
--- The only mod-vs-native discriminant on our Storage / stations (shared home, slice 0).
+-- The only mod-vs-native discriminant on our Storage / stations (shared home: RmManureShared).
 local MARKER = RmManureShared.MARKER
 -- Per-placeable native-straw-intake flag name (shared home; RmTroughDivert reads it).
 -- Runtime-only, never persisted; sampled BEFORE the mod adds STRAW to a station.
@@ -320,7 +320,7 @@ end
 --- and stamp the MARKER. aiSupportedFillTypes is deliberately untouched: straw/manure are
 --- never advertised to AI. Every mutation is recorded for revertStationAugment. The direct
 --- seed is durable for the whole session: the engine rebuilds a station's supported types
---- only while the station itself loads, never after finalize (verified), so nothing wipes
+--- only while the station itself loads, never after finalize (verified in-game), so nothing wipes
 --- the seed mid-session. Exposed for the unit test.
 ---@param station table a pre-existing UnloadingStation (caller verified supportedFillTypes is present)
 ---@param straw integer
@@ -435,9 +435,9 @@ local function storageNeedsWarning(storage, straw, manure)
 end
 
 -- ============================================================================
--- PHASE-1 INJECTION-TIMING MITIGATION
+-- CURVE-INJECTION-TIMING MITIGATION
 --
--- Slice 1 injects the straw/manure curves at loadMapFinished;
+-- RmCurveInjector injects the straw/manure curves at loadMapFinished;
 -- onHusbandryAnimalsUpdate sets inputLitersPerHour/outputLitersPerHour from
 -- subType.input.straw:get(age) on cluster changes. If a husbandry's clusters last updated
 -- BEFORE the curves existed, rates lock at 0 until an animal add/remove. Force a recompute
@@ -445,7 +445,7 @@ end
 -- ============================================================================
 
 ---Force an animal-cluster recompute on a husbandry that has the animals spec, so the
---- straw producer re-reads the slice-1 curves. Guards the animals spec/clusterSystem.
+--- straw producer re-reads the injected curves. Guards the animals spec/clusterSystem.
 ---@param self table the placeable
 local function recomputeAnimalRates(self)
     local animals = self.spec_husbandryAnimals
@@ -529,7 +529,7 @@ end
 --- unresolved fill types), unsubscribe the built storage's FARM_DELETED subscription
 --- (leak hardening) and clear Storage AND both stations so the base wires nothing.
 ---
---- After either path succeeds, force the slice-1 rate-recompute mitigation on
+--- After either path succeeds, force the injection-timing rate-recompute mitigation on
 --- this husbandry.
 ---@param self table the placeable
 local function husbandryOnFinalizePlacement(self)
@@ -641,7 +641,7 @@ local function husbandryOnFinalizePlacement(self)
         end
         self[AUGMENT_STATE] = nil
 
-        -- Re-read the slice-1 curves now that the sink exists (see mitigation note above).
+        -- Re-read the injected curves now that the sink exists (see mitigation note above).
         recomputeAnimalRates(self)
 
         Log:info("augmented central storage for %s '%s' (added %s; unloadingStation %s; loadingStation %s)",
@@ -697,7 +697,7 @@ local function husbandryOnFinalizePlacement(self)
     -- absent) so the divert and diagnostics always read a definite value.
     self[NATIVE_STRAW_INTAKE] = false
 
-    -- Re-read the slice-1 curves now that the sink exists (see mitigation note above).
+    -- Re-read the injected curves now that the sink exists (see mitigation note above).
     recomputeAnimalRates(self)
 
     Log:info("wired straw sink for %s '%s' "
@@ -722,9 +722,9 @@ end
 -- sweep each load naturally warns once per instance present at load; a mid-session placement
 -- is swept next load.
 --
--- Deviation from the PoC: RETURNS the warned count and takes the placeable list as a param
+-- Deviation from the prototype: RETURNS the warned count and takes the placeable list as a param
 -- (defaulting to the live mission), so the in-game suite can assert the count directly --
--- the PoC test's logger-replacement counting trick cannot work in-game.
+-- the prototype test's logger-replacement counting trick cannot work in-game.
 -- ============================================================================
 
 ---Sweep every placed injected-set husbandry whose pre-existing central storage still

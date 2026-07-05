@@ -1,48 +1,50 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="107">
     <author>Ritter</author>
-    <version>0.1.0.0-dev.6</version>
+    <version>0.2.0.0</version>
     <title>
         <en>Manure For All</en>
     </title>
     <description>
         <en><![CDATA[
-Make every animal husbandry produce collectable manure.
+Make every animal husbandry produce collectable manure. Bed chickens, sheep, goats and pastured animals with straw and collect manure from a heap - just like cows, pigs and horses.
+
+In the base game only cows, pigs and horses turn straw bedding into manure. Manure For All wires the same straw-to-manure pipeline onto every animal husbandry, including map- and mod-added animals. Nothing is replaced or edited: it augments the husbandries you already own and works with existing savegames.
+
+ALPHA RELEASE: tested in singleplayer and multiplayer, but expect rough edges - please report issues on GitHub. Debug logging is enabled in this build.
 
 Features:
-- Feature 1
-- Feature 2
+- All husbandries can consume straw bedding and produce collectable manure, regardless of animal type
+- If a husbandry has no straw tip point, tip bulk straw at its food point - food still feeds the animals
+- Produced manure is delivered to a player-placed manure heap near the husbandry
+- Warns on screen and in the log when a husbandry has no heap in range - manure is never lost silently
+- Straw use and manure output scale per animal from its food needs
+- Animals that already produce manure (cow, pig, horse) and mods like RealisticLivestock are never overridden
+
+Usage: place a manure heap near the husbandry, tip bulk straw at its food point, collect from the heap.
+
+Limitations: without a heap in range, produced manure is discarded hourly (with a warning); straw must be tipped loose (no bales); on dedicated servers the no-heap warning is log-only.
+
+Documentation: https://github.com/rittermod/FS25_ManureForAll
 
 Changelog:
-0.1.0.0:
-- Initial release
-        ]]>        </en>
+0.2.0.0 (Alpha):
+- First public alpha
+- All husbandries now can consume straw bedding and produce collectable manure, regardless of animal type
+- If the husbandry has no straw tip point, tip bulk straw at a husbandry's food point to add it
+- Produced manure is delivered to a player-placed manure heap near the husbandry
+- Warns on screen and in the log when a producing husbandry has no manure heap in range, so manure is never lost silently
+- Straw use and manure output scale per animal from its food needs; map- and mod-added animals are covered automatically
+- Animals that already produce manure (cow, pig, horse) and mods that define their own production (e.g. RealisticLivestock) are never overridden
+- Husbandries that already bring their own straw intake keep it (never a second straw path)
+- Multiplayer supported: tested on host, client, and dedicated server
+        ]]></en>
     </description>
 
     <iconFilename>icon_manureForAll.dds</iconFilename>
     <multiplayer supported="true"/>
 
-    <!-- Optional: Inline localization (for simple mods) -->
-    <!-- <l10n>
-        <text name="manureForAll_action">
-            <en>Action Name</en>
-        </text>
-    </l10n> -->
-
-    <!-- Optional: External localization files (for complex mods) -->
-    <!-- <l10n filenamePrefix="languages/l10n"/> -->
-
     <extraSourceFiles>
         <sourceFile filename="scripts/main.lua"/>
     </extraSourceFiles>
-
-    <!-- Optional: Input bindings -->
-    <!-- <actions>
-        <action name="{{ACTION_NAME}}" category="MENU" axisType="HALF" ignoreComboMask="true"/>
-    </actions>
-    <inputBinding>
-        <actionBinding action="{{ACTION_NAME}}">
-            <binding device="KB_MOUSE_DEFAULT" input="KEY_{{key}}" index="1"/>
-        </actionBinding>
-    </inputBinding> -->
 </modDesc>

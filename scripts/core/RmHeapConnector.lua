@@ -1,10 +1,10 @@
 --[[
     RmHeapConnector.lua
 
-    Slice 4 (MFA-5) -- reconnect a mod-wired husbandry's manure UnloadingStation to in-range
-    player-placed manure heaps, and warn honestly when there is no heap to catch the manure.
+    Reconnect a mod-wired husbandry's manure UnloadingStation to in-range player-placed
+    manure heaps, and warn honestly when there is no heap to catch the manure.
 
-    Slice 2/3 (RmStrawSink + RmTroughDivert) build a runtime STRAW+MANURE Storage +
+    RmStrawSink + RmTroughDivert build a runtime STRAW+MANURE Storage +
     UnloadingStation + LoadingStation on strawless husbandries, MARKER-tagged and registered in
     the extendable-station pool with the internal MANURE capacity at 0 (base-cattleshed-consistent).
     Produced manure then flows OUT to a player-placed external manure heap and is collected at the
@@ -21,12 +21,12 @@
         heap's own finalize, which discovers our extendable husbandry station);
       * an appended PlaceableManureHeap onDelete re-sweeps so a husbandry that lost its last heap
         warns again;
-      * an appended PlaceableManureHeap onFinalizePlacement re-sweep (RECORDED HARDENING over the
-        PoC, ratified MFA-5): base auto-connect runs no mod code, so a previously-warned husbandry
+      * an appended PlaceableManureHeap onFinalizePlacement re-sweep (a HARDENING over the
+        prototype): base auto-connect runs no mod code, so a previously-warned husbandry
         that gains a heap keeps its one-time flag set and would NEVER re-warn after that heap is
         later deleted -- running the sweep on heap finalize re-arms the flag while connected.
 
-    Correctness (source-verified):
+    Correctness (verified in-game):
       * SERVER-ONLY (g_server): storage wiring is server-authoritative and replicates to clients
         via base storage sync; a client-side wire diverges target lists.
       * OURS-ONLY: getExtendableUnloadingStationsInRange returns ALL extendable stations incl.
@@ -47,11 +47,11 @@
     once per load: honest reminder), RE-ARMS when a heap connects, and fires again if the husbandry
     later loses its last heap. Fired only after the savegame is fully loaded, so a reload raises no
     false loss warnings. Dedicated-server players get no toast (log-only; a client notification needs
-    a sync event -- slice 5); a listen-server host may see coalesced toasts about other farms.
+    a sync event, not yet implemented); a listen-server host may see coalesced toasts about other farms.
 
-    Deviations from the PoC (RmManureHeapReconnect.lua), all ratified in MFA-5:
-      * console lifecycle (addModEventListener + register/remove) NOT ported -- the slice-0 console
-        shell owns registration; `mfaDump heaps` delegates here;
+    Deviations from the prototype this module productionizes:
+      * console lifecycle (addModEventListener + register/remove) NOT ported -- the console
+        shell (RmManureConsole) owns registration; `mfaDump heaps` delegates here;
       * the `rmManureHeap reconnect` force-pass console action NOT ported -- save+reload is the
         contracted operator recovery (the SAVEGAME_LOADED pass re-derives all links);
       * the local resolveManureType NOT ported -- MANURE comes from RmManureShared.resolveFillTypes
@@ -77,8 +77,8 @@ local NOHEAP_WARNED = "rmNoHeapWarned" -- one-time no-heap warning flag, set on 
 -- ENGINE / REGISTRY SEAMS
 --
 -- Read INDIRECTLY through the module table so the in-game suite can point them at fakes to drive
--- the reconnect passes WITHOUT reassigning the engine globals. Ritter convention + the
--- sandbox-global-access wiki: the FS25 mod sandbox (setfenv) makes a bare `g_xxx = nil` a no-op
+-- the reconnect passes WITHOUT reassigning the engine globals. Ritter convention: the FS25
+-- mod sandbox (setfenv) makes a bare `g_xxx = nil` a no-op
 -- (the read falls through __index to the still-present real global), and mutating the LIVE
 -- g_server / g_dedicatedServer mid-game is unsafe -- so the server / dedicated-server GATES read
 -- through these seams and the suite flips the seam, never the global. Container collaborators
@@ -115,7 +115,7 @@ function RmHeapConnector.resolveManure()
 end
 
 -- ============================================================================
--- COLLABORATOR SEAM (MFA-3 precedent: optional param, defaults to the live game)
+-- COLLABORATOR SEAM (optional param, defaults to the live game)
 -- ============================================================================
 
 ---The live container collaborators the passes read. A nil `deps` anywhere below means "read the
@@ -429,7 +429,7 @@ function RmHeapConnector.reconnectHusbandry(husbandry, deps)
 end
 
 -- ============================================================================
--- DIAGNOSTIC (mfaDump heaps -- delegated to by the slice-0 console shell)
+-- DIAGNOSTIC (mfaDump heaps -- delegated to by the console shell)
 -- ============================================================================
 
 ---`mfaDump heaps`: report each wired husbandry's manure-collection wiring state. Reads no cached
@@ -478,7 +478,7 @@ end
 ---SAVEGAME_LOADED handler: fired AFTER all savegame placeables (husbandries + heaps) have loaded,
 --- and published only on the server. Marks the game loaded so post-load fresh placements may warn,
 --- then runs the server backstop reconnect + the coalesced heap-less warning sweep. `deps` is the
---- injectable-collaborator table; the live message publishes with NO args (source-verified), so it
+--- injectable-collaborator table; the live message publishes with NO args, so it
 --- fires this with deps=nil -> the live game. The suite passes fakes to drive the pass.
 ---@param deps table|nil
 function RmHeapConnector.onSavegameLoaded(self, deps)
@@ -511,7 +511,7 @@ local function onManureHeapDelete(_, deps)
     warnHeaplessHusbandries(deps)
 end
 
----PlaceableManureHeap:onFinalizePlacement (APPENDED, after base): RECORDED HARDENING (MFA-5). Base
+---PlaceableManureHeap:onFinalizePlacement (APPENDED, after base): the re-arm HARDENING. Base
 --- auto-connect wires this newly placed heap to our in-range stations but runs NO mod code, so a
 --- previously-warned husbandry that just gained the heap keeps rmNoHeapWarned set. Re-run the sweep
 --- so warnIfHeapless re-arms (clears) the flag while the heap is connected -- otherwise a later
