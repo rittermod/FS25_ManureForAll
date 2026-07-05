@@ -22,6 +22,9 @@
         allowed, sized, and deposited through the straw UnloadingStation, read LIVE.
 
     Correctness points this productionizes over the raw mechanism:
+      * a husbandry with a NATIVE straw intake (RmStrawSink samples + records the
+        per-placeable flag before augmenting) keeps its own intake: the divert is skipped
+        whole, so there is never a double straw path on one husbandry;
       * the trough `target` is ONE closure table shared across every feedingTrough, but each
         trough keeps its OWN `fillTypes` -- so wrap the target once yet set fillTypes on all
         (a nil fillTypes table already accepts all types and is NOT mutated);
@@ -90,6 +93,13 @@ end
 --- on every load because the trough target is rebuilt fresh each onLoad (not persisted).
 ---@param self table the placeable
 local function applyFoodroute(self)
+    -- A husbandry that brought its OWN straw intake (flag sampled by RmStrawSink BEFORE it
+    -- added STRAW to the station) keeps it -- never add a second straw path via the trough.
+    if self[RmManureShared.NATIVE_STRAW_INTAKE] == true then
+        Log:debug("foodroute: %s has a native straw intake -- divert skipped", tostring(self.typeName))
+        return
+    end
+
     local straw = RmManureShared.resolveFillTypes()
     if straw == nil then
         Log:warning("foodroute: STRAW fill type unresolved -- skipped")

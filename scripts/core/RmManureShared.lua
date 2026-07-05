@@ -15,6 +15,13 @@ RmManureShared = {}
 -- Husbandry marker: tags fill-type / husbandry state owned by this mod.
 RmManureShared.MARKER = "rmManureForAll"
 
+-- Per-placeable native-straw-intake flag name. RUNTIME-ONLY: written by RmStrawSink at
+-- augment/build time, read by RmTroughDivert, never persisted. Sampled BEFORE the mod adds
+-- STRAW to a station, so it records whether the husbandry brought its OWN straw intake
+-- (station support or a straw-accepting unload trigger) -- true means the food-trough
+-- straw divert must not add a second intake path.
+RmManureShared.NATIVE_STRAW_INTAKE = "rmNativeStrawIntake"
+
 local Log = RmLogging.getLogger("ManureForAll")
 
 ---Resolve a single fill type from its enum value and manager lookup.

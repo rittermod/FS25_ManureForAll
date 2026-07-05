@@ -1,34 +1,47 @@
 --[[
     RmStrawSink.lua
 
-    Slice 2 (instance half) -- the runtime husbandry straw/manure sink.
+    The runtime husbandry straw/manure sink -- BUILD-OR-AUGMENT per placeable.
 
-    For each strawless husbandry instance whose type RmSpecInjector injected onto, build
-    the missing objects AT RUNTIME -- with no i3d/XML edit -- so straw can be stored,
-    consumed on the server hour-tick, and converted to MANURE:
-      * build + assign a STRAW+MANURE Storage at onLoad (appended, before the base
-        savegame loadFromXMLFile so straw/manure round-trip);
-      * build + assign an UnloadingStation AND a LoadingStation at onFinalizePlacement
-        (prepended) -- then let the base finalize that runs right after register and wire all
-        three itself (re-running that registration ourselves is not safe, so we never do).
+    For each husbandry instance whose type RmSpecInjector injected onto, make sure a
+    STRAW+MANURE-capable sink exists AT RUNTIME -- with no i3d/XML edit -- so straw can be
+    stored, consumed on the server hour-tick, and converted to MANURE. Two paths, chosen
+    per placeable:
+      * CLEAN SLATE (owns no storage/stations): build + assign a STRAW+MANURE Storage at
+        onLoad (appended, before the base savegame loadFromXMLFile so straw/manure
+        round-trip); build + assign an UnloadingStation AND a LoadingStation at
+        onFinalizePlacement (prepended) -- then let the base finalize that runs right after
+        register and wire all three itself (re-running that registration is not safe, so
+        we never do).
+      * AUGMENT (owns a central storage -- manual-water pastures, milk, liquid-manure):
+        mutate the EXISTING storage in place at onLoad, adding only the MISSING of STRAW
+        (cap N) / MANURE (cap 0) and never touching a native type's capacity or level;
+        then at onFinalizePlacement add STRAW+MANURE support + extension to the existing
+        UnloadingStation (or build one), and REUSE an existing LoadingStation completely
+        untouched -- its source-storage link is what lets the producer draw straw, and
+        never adding STRAW to its supported types keeps straw one-way IN at its real
+        trigger. A storage that cannot isolate STRAW (single fill type, or a native type
+        drawing on the shared capacity pool) is skipped whole and warned by the post-load
+        sweep -- no partial wiring.
 
     The LoadingStation is REQUIRED for manure: without it removeHusbandryFillLevel returns
     the full requested amount, so the producer's delta = amount - removeHusbandryFillLevel
     = 0 and no manure is produced. With it, straw is drawn down and delta > 0.
 
-    Build is ALL-OR-NOTHING: on any partial-build failure (nil node / unresolved fill
-    types) we unsubscribe the built storage's FARM_DELETED subscription and clear Storage
-    AND both stations so the base wires nothing -- never a half-wired husbandry (a missing
-    LoadingStation makes removeHusbandryFillLevel consume 0: straw absorbed, no manure).
+    Both paths are ALL-OR-NOTHING: on any station-phase failure the clean-slate build
+    clears its own Storage + stations (never a half-wired husbandry), and the augment path
+    SURGICALLY reverts every field it added on BOTH the storage and the station -- base
+    objects end exactly as base built them and are never deleted or nil'd.
 
-    The internal MANURE capacity is built at 0 (base-exact): produced manure is skipped
-    past the 0-free internal store and flows to a player-placed external heap that connects
-    to the extension-enabled UnloadingStation (the base barn pattern). The heap load-order
-    reconnect pass and the no-heap warning are a later slice.
+    The internal MANURE capacity is 0 on both paths (base-exact): produced manure is
+    skipped past the 0-free internal store and flows to a player-placed external heap that
+    connects to the extension-enabled UnloadingStation (the base barn pattern).
 
     MARKER (from RmManureShared) is LOAD-BEARING: the console iterator, the warning sweep,
-    and the later heap pass all visit EVERY husbandry -- our mod-built objects are told
-    apart from base barns' only by the MARKER on our Storage/stations.
+    and the heap pass all visit EVERY husbandry -- our built/augmented objects are told
+    apart from untouched base storage only by the MARKER on our Storage/stations. A reused
+    LoadingStation is deliberately NEVER stamped: wired-ness keys on the storage +
+    unloadingStation MARKER only.
 
     Author: Ritter
 ]]
@@ -52,6 +65,13 @@ local STORAGE_RADIUS = 100
 
 -- The only mod-vs-native discriminant on our Storage / stations (shared home, slice 0).
 local MARKER = RmManureShared.MARKER
+-- Per-placeable native-straw-intake flag name (shared home; RmTroughDivert reads it).
+-- Runtime-only, never persisted; sampled BEFORE the mod adds STRAW to a station.
+local NATIVE_STRAW_INTAKE = RmManureShared.NATIVE_STRAW_INTAKE
+-- Runtime-only field on the placeable carrying the onLoad storage revert-record to the
+-- finalize station phase (set by the augment branch of husbandryOnLoad; consumed AND
+-- cleared -- success or abort -- by husbandryOnFinalizePlacement). Never persisted.
+local AUGMENT_STATE = "rmStrawAugmentState"
 
 -- ============================================================================
 -- OBJECT BUILDERS
@@ -126,18 +146,18 @@ local function buildStrawStation(self, rootNode, straw, manure)
     return station
 end
 
----Build a straw/manure LoadingStation reusing an existing component node -- the
---- sibling of the UnloadingStation and the object that makes removeHusbandryFillLevel
---- draw straw down (delta > 0) so manure is produced. MANURE is seeded as the solid
---- fill type (NOT LIQUIDMANURE), so any liquid-manure loading-station handling during finalize
---- stays a safe no-op. LoadingStation.new already sets sourceStorages / loadTriggers, but we
---- assign them explicitly for parity + robustness.
+---Build a straw LoadingStation reusing an existing component node -- the sibling of the
+--- UnloadingStation and the object that makes removeHusbandryFillLevel draw straw down
+--- (delta > 0) so manure is produced. Seeds STRAW ONLY: STRAW alone satisfies the
+--- addSourceStorage fill-type intersection, and MANURE never belongs on any
+--- loadingStation (manure is one-way OUT through the UnloadingStation, never loadable
+--- here). LoadingStation.new already sets sourceStorages / loadTriggers, but we assign
+--- them explicitly for parity + robustness.
 ---@param self table the placeable
 ---@param rootNode number an existing component scene node
 ---@param straw integer
----@param manure integer
 ---@return table station
-local function buildStrawLoadingStation(self, rootNode, straw, manure)
+local function buildStrawLoadingStation(self, rootNode, straw)
     local station = LoadingStation.new(self.isServer, self.isClient) --[[@as table]]
     station.rootNode = rootNode -- reuse existing node; NO i3d edit, NO triggers
     -- owningPlaceable kept non-nil so station-name lookups stay safe (we set no stationName,
@@ -148,9 +168,201 @@ local function buildStrawLoadingStation(self, rootNode, straw, manure)
     station.sourceStorages = {}
     station.loadTriggers = {} -- seeded empty so trigger-walking station setup stays safe
     station.aiSupportedFillTypes = {}
-    station.supportedFillTypes = { [straw] = true, [manure] = true } -- seed; addSourceStorage intersection gate
+    station.supportedFillTypes = { [straw] = true } -- seed STRAW only; addSourceStorage intersection gate
     station[MARKER] = true
     return station
+end
+
+-- ============================================================================
+-- AUGMENT BUILDERS (in-place mutation of a pre-existing storage / station)
+--
+-- A husbandry that already OWNS a central storage (manual-water pastures, milk,
+-- liquid-manure) is augmented IN PLACE instead of built on: add only the MISSING of
+-- STRAW/MANURE, never touch a native type's capacity or level, and record every mutation
+-- so the finalize station phase can surgically revert BOTH the storage and the station on
+-- any failure. Field mutation only -- no i3d/XML edit, no registration (the base finalize
+-- that runs right after our prepended wrapper registers and wires the augmented objects
+-- exactly like untouched base ones). Re-runs every load: the MARKER is runtime-only and
+-- the base storage is rebuilt from store XML each load, so the augment is re-derived
+-- per-load (the MARKER guard only prevents a double-augment WITHIN a load). Runs
+-- identically per-peer -- every mutation below is deterministic.
+-- ============================================================================
+
+---Classify whether a pre-existing central storage can hold STRAW in isolation. False for
+--- a single-fill-type storage; false when any EXISTING fill type lacks an explicit
+--- per-type capacity (that native type draws on the shared capacity pool, so an added
+--- STRAW level would eat its headroom -- never accept that competition); false when any
+--- of the six fill-type/level tables a fully loaded storage carries is missing, or when a
+--- listed fill type is not materialized in ALL of them (defensive; the base storage load
+--- always creates all six and materializes every type). Pure; exposed for the unit test.
+---@param storage table pre-existing spec_husbandry.storage
+---@return boolean canIsolate
+---@return string|nil reason skip reason when false
+local function storageCanIsolateStraw(storage)
+    if storage.supportsMultipleFillTypes ~= true then
+        return false, "single-fill-type storage"
+    end
+    if storage.fillTypes == nil or storage.capacities == nil or storage.fillLevels == nil
+        or storage.fillLevelsLastSynced == nil or storage.fillLevelsLastPublished == nil
+        or storage.sortedFillTypes == nil then
+        return false, "unexpected storage shape"
+    end
+    for fillType in pairs(storage.fillTypes) do
+        if storage.capacities[fillType] == nil then
+            return false, "shared-pool native fill type"
+        end
+        -- A listed type must be materialized everywhere: absent from fillLevels/mirrors the
+        -- storage's own level setter silently no-ops on it, absent from sortedFillTypes it
+        -- never streams to peers -- and augment would skip it as "already present", shipping
+        -- a silently inert store.
+        if storage.fillLevels[fillType] == nil
+            or storage.fillLevelsLastSynced[fillType] == nil
+            or storage.fillLevelsLastPublished[fillType] == nil then
+            return false, "unexpected storage shape"
+        end
+        local sorted = false
+        for _, sortedType in ipairs(storage.sortedFillTypes) do
+            if sortedType == fillType then
+                sorted = true
+                break
+            end
+        end
+        if not sorted then
+            return false, "unexpected storage shape"
+        end
+    end
+    return true, nil
+end
+
+---Add the MISSING of STRAW/MANURE to a pre-existing multi-fill-type storage, in fixed
+--- order STRAW then MANURE. capacities[straw]=STORAGE_CAPACITY; the explicit
+--- capacities[manure]=0 is LOAD-BEARING: per-type free capacity only isolates when the
+--- capacity is set, so the 0 keeps manure free-capacity at 0 -- produced manure skips the
+--- internal store and flows to the connected heap instead of pooling uncollectably here.
+--- sortedFillTypes is APPENDED, never table.sort'ed: the storage read/write streams pair
+--- fill levels POSITIONALLY by sortedFillTypes, and both peers run this same
+--- deterministic append (keeping index 1 native also preserves the base dynamicFillPlane
+--- default). Never touches an existing type's capacity or level. Exposed for the
+--- unit test.
+---@param storage table pre-existing spec_husbandry.storage (storageCanIsolateStraw true)
+---@param straw integer
+---@param manure integer
+---@return table record { addedTypes = { <the fill types actually added, in order> } }
+local function augmentStorage(storage, straw, manure)
+    local record = { addedTypes = {} }
+    for _, fillType in ipairs({ straw, manure }) do
+        if storage.fillTypes[fillType] ~= true then
+            storage.fillTypes[fillType] = true
+            storage.capacities[fillType] = fillType == straw and STORAGE_CAPACITY or 0
+            storage.fillLevels[fillType] = 0
+            storage.fillLevelsLastSynced[fillType] = 0
+            storage.fillLevelsLastPublished[fillType] = 0
+            table.insert(storage.sortedFillTypes, fillType)
+            table.insert(record.addedTypes, fillType)
+        end
+    end
+    storage[MARKER] = true
+    return record
+end
+
+---SURGICAL revert of augmentStorage: remove exactly the fill types the record says were
+--- added -- from all five capacity/level tables and (by value) from sortedFillTypes --
+--- and clear the MARKER. NOTHING else: the base savegame loadFromXMLFile restores the
+--- native (e.g. WATER) saved level BETWEEN our onLoad augment and the finalize station
+--- phase, so a whole-table snapshot restore would wipe it -- only ever remove our own
+--- additions. Exposed for the unit test.
+---@param storage table the storage augmentStorage mutated
+---@param record table the record augmentStorage returned
+local function revertStorageAugment(storage, record)
+    for _, fillType in ipairs(record.addedTypes) do
+        storage.fillTypes[fillType] = nil
+        storage.capacities[fillType] = nil
+        storage.fillLevels[fillType] = nil
+        storage.fillLevelsLastSynced[fillType] = nil
+        storage.fillLevelsLastPublished[fillType] = nil
+        for i = #storage.sortedFillTypes, 1, -1 do
+            if storage.sortedFillTypes[i] == fillType then
+                table.remove(storage.sortedFillTypes, i)
+            end
+        end
+    end
+    storage[MARKER] = nil
+end
+
+---True when a station already brings its OWN straw intake: STRAW in the station's
+--- supported types, or any unload trigger declaring STRAW in the trigger's own fill-type
+--- gate (a trigger with a nil fill-type table accepts everything and defers to station
+--- support, which the first test already covered). Pure -- MUST be sampled BEFORE the mod
+--- adds STRAW to the station, or it would read our own addition back as "native".
+--- Exposed for the unit test.
+---@param station table a pre-existing UnloadingStation
+---@param straw integer
+---@return boolean
+local function sampleNativeStrawIntake(station, straw)
+    if station.supportedFillTypes ~= nil and station.supportedFillTypes[straw] ~= nil then
+        return true
+    end
+    if station.unloadTriggers ~= nil then
+        for _, trigger in ipairs(station.unloadTriggers) do
+            if trigger.fillTypes ~= nil and trigger.fillTypes[straw] then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+---Augment a pre-existing UnloadingStation for the straw sink: add the MISSING of
+--- STRAW/MANURE to supportedFillTypes (== nil test, matching the base support getter),
+--- ensure supportsExtension (must happen in our PREPENDED finalize so the base
+--- registration right after sees it; base water stations already ship true) and a
+--- storageRadius (set only when ABSENT -- never shrink or overwrite an existing radius),
+--- and stamp the MARKER. aiSupportedFillTypes is deliberately untouched: straw/manure are
+--- never advertised to AI. Every mutation is recorded for revertStationAugment. The direct
+--- seed is durable for the whole session: the engine rebuilds a station's supported types
+--- only while the station itself loads, never after finalize (verified), so nothing wipes
+--- the seed mid-session. Exposed for the unit test.
+---@param station table a pre-existing UnloadingStation (caller verified supportedFillTypes is present)
+---@param straw integer
+---@param manure integer
+---@return table record { addedTypes = {...}, setExtension = boolean, setRadius = boolean }
+local function augmentStation(station, straw, manure)
+    local record = { addedTypes = {}, setExtension = false, setRadius = false }
+    for _, fillType in ipairs({ straw, manure }) do
+        if station.supportedFillTypes[fillType] == nil then
+            station.supportedFillTypes[fillType] = true
+            table.insert(record.addedTypes, fillType)
+        end
+    end
+    if station.supportsExtension ~= true then
+        station.supportsExtension = true
+        record.setExtension = true
+    end
+    if station.storageRadius == nil then
+        station.storageRadius = STORAGE_RADIUS
+        record.setRadius = true
+    end
+    station[MARKER] = true
+    return record
+end
+
+---Inverse of augmentStation: remove exactly the recorded supported-type additions,
+--- restore supportsExtension / storageRadius only when the record says WE set them, and
+--- clear the MARKER -- the station ends exactly as base built it. Exposed for the
+--- unit test.
+---@param station table the station augmentStation mutated
+---@param record table the record augmentStation returned
+local function revertStationAugment(station, record)
+    for _, fillType in ipairs(record.addedTypes) do
+        station.supportedFillTypes[fillType] = nil
+    end
+    if record.setExtension then
+        station.supportsExtension = false
+    end
+    if record.setRadius then
+        station.storageRadius = nil
+    end
+    station[MARKER] = nil
 end
 
 -- ============================================================================
@@ -174,34 +386,52 @@ local function isLiveHusbandry(self)
 end
 
 ---STRUCTURAL "owns none of storage/unloadingStation/loadingStation" test: true only for a
---- husbandry that declares no central storage of its own. An instance that already owns ANY
---- of the three is left entirely untouched (never overwrite persisted state; a milk /
---- liquid-manure husbandry that rides a central store is the deferred augment case, warned by
---- the post-load sweep). Not a straw test -- purely storage presence.
+--- husbandry that declares no central storage of its own -- the CLEAN-SLATE build case.
+--- An instance that owns a central storage is the AUGMENT case (mutated in place, never
+--- overwritten); storage nil with a station present is a degenerate modded shape left
+--- untouched. Not a straw test -- purely storage presence.
 ---@param h table spec_husbandry
 ---@return boolean
 local function hasNoHusbandryStorage(h)
     return h.storage == nil and h.unloadingStation == nil and h.loadingStation == nil
 end
 
----True if a pre-existing (non-mod) central storage cannot hold BOTH STRAW and MANURE -- the
---- deferred milk / liquid-manure augment case that warrants a warning. Excludes our own
---- mod-built storage (MARKER: it always holds both). Reads storage.fillTypes directly (NOT
---- getHusbandryIsFillTypeSupported, which reads the possibly-nil unloadingStation of a
---- storage-only husbandry and would misclassify). Pure; exposed for the unit test.
+---True if a pre-existing (non-mod) central storage cannot hold BOTH STRAW and MANURE --
+--- the augment-skipped case that warrants a warning -- with a second return naming WHY
+--- (derived via storageCanIsolateStraw, so the warning names the actual augment blocker).
+--- Excludes our own built/augmented storage (MARKER: it always holds both). Reads
+--- storage.fillTypes directly (NOT getHusbandryIsFillTypeSupported, which reads the
+--- possibly-nil unloadingStation of a storage-only husbandry and would misclassify).
+--- Pure; exposed for the unit test.
 ---@param storage table|nil spec_husbandry.storage
 ---@param straw integer
 ---@param manure integer
----@return boolean
+---@return boolean needsWarning
+---@return string|nil reason skip reason for the warning text (nil when no warning)
 local function storageNeedsWarning(storage, straw, manure)
     if storage == nil or storage[MARKER] == true then
-        return false -- no central storage, or it is ours (holds STRAW+MANURE already)
+        return false, nil -- no central storage, or ours (built/augmented: holds both already)
     end
     local fillTypes = storage.fillTypes
     if fillTypes == nil then
-        return true -- a central storage that lists no fill types cannot hold STRAW+MANURE
+        return true, "central storage lists no fill types"
     end
-    return fillTypes[straw] ~= true or fillTypes[manure] ~= true
+    if fillTypes[straw] == true and fillTypes[manure] == true then
+        return false, nil -- already holds both (e.g. a native straw setup) -- nothing lost
+    end
+    local canIsolate, why = storageCanIsolateStraw(storage)
+    if not canIsolate and why == "single-fill-type storage" then
+        return true, "cannot isolate STRAW (single-fill-type storage)"
+    end
+    if not canIsolate and why == "shared-pool native fill type" then
+        return true, "cannot isolate STRAW (shared-pool fill type)"
+    end
+    if not canIsolate and why == "unexpected storage shape" then
+        return true, "cannot isolate STRAW (unexpected storage shape)"
+    end
+    -- Isolatable (or an unexpected shape) yet still lacking STRAW/MANURE: the augment did
+    -- not stick this load (e.g. a station-phase abort reverted it).
+    return true, "could not be augmented"
 end
 
 -- ============================================================================
@@ -228,42 +458,79 @@ end
 -- LIFECYCLE WRAPPERS
 -- ============================================================================
 
----onLoad (APPENDED, after base): for a strawless injected-set husbandry, build the
---- straw/manure Storage and assign it to spec_husbandry.storage BEFORE the base savegame
---- loadFromXMLFile so straw/manure round-trip. The no-storage guard means we never
---- overwrite a husbandry that already owns persisted storage and makes the build idempotent
---- within an instance.
+---onLoad (APPENDED, after base): make sure an injected-set husbandry ends with a
+--- STRAW+MANURE-capable storage BEFORE the base savegame loadFromXMLFile runs, so saved
+--- straw/manure levels round-trip (the base restore drops a saved level whose fill type
+--- is absent from fillLevels). Three shapes:
+---   * owns nothing -> CLEAN-SLATE build (assign a fresh mod storage);
+---   * owns a central storage that is not ours/augmented this load -> AUGMENT it in place
+---     when it can isolate STRAW, parking the revert-record on the placeable for the
+---     finalize station phase; a cannot-isolate storage is skipped whole -- the
+---     SAVEGAME_LOADED sweep owns the once-per-load WARNING, so no double-warn here;
+---   * storage nil but some station exists (degenerate modded shape) -> left untouched.
+--- Runs identically per-peer.
 ---@param self table the placeable
 local function husbandryOnLoad(self)
     if not isLiveHusbandry(self) then
         return
     end
     local h = self.spec_husbandry
-    if not hasNoHusbandryStorage(h) then
-        Log:debug("%s already owns storage/station -- not wiring", tostring(self.typeName))
+
+    if hasNoHusbandryStorage(h) then
+        local straw, manure = RmManureShared.resolveFillTypes()
+        if straw == nil or manure == nil then
+            Log:warning("STRAW/MANURE fill type unresolved; skipping storage build for %s", tostring(self.typeName))
+            return
+        end
+        h.storage = buildStrawStorage(self, straw, manure)
+        Log:debug("assigned straw/manure Storage to %s at onLoad", tostring(self.typeName))
         return
     end
 
-    local straw, manure = RmManureShared.resolveFillTypes()
-    if straw == nil or manure == nil then
-        Log:warning("STRAW/MANURE fill type unresolved; skipping storage build for %s", tostring(self.typeName))
+    if h.storage ~= nil and h.storage[MARKER] ~= true then
+        local straw, manure = RmManureShared.resolveFillTypes()
+        if straw == nil or manure == nil then
+            Log:warning("STRAW/MANURE fill type unresolved; leaving %s central storage untouched",
+                tostring(self.typeName))
+            return
+        end
+        local canIsolate, reason = storageCanIsolateStraw(h.storage)
+        if not canIsolate then
+            -- The SAVEGAME_LOADED sweep owns the once-per-load WARNING; never double-warn here.
+            Log:debug("%s central storage cannot isolate STRAW (%s) -- skipped, left untouched",
+                tostring(self.typeName), tostring(reason))
+            return
+        end
+        self[AUGMENT_STATE] = { storage = augmentStorage(h.storage, straw, manure) }
+        Log:debug("augmented central storage of %s at onLoad (%d fill type(s) added)",
+            tostring(self.typeName), #self[AUGMENT_STATE].storage.addedTypes)
         return
     end
 
-    h.storage = buildStrawStorage(self, straw, manure)
-    Log:debug("assigned straw/manure Storage to %s at onLoad", tostring(self.typeName))
+    -- Storage nil with a station present (degenerate modded shape), or the storage is
+    -- already ours this load -- nothing to build or augment.
+    Log:debug("%s owns station state the mod does not build on or augment -- not wiring",
+        tostring(self.typeName))
 end
 
----onFinalizePlacement (PREPENDED, before base): for a husbandry whose Storage WE built at
---- onLoad (marker) and that has no station yet, build BOTH the UnloadingStation and the
---- LoadingStation and assign them. Registration/wiring is left to the base finalize that
---- runs right after -- it sees storage + both stations non-nil and registers + wires all
---- three itself (we never re-run that registration).
+---onFinalizePlacement (PREPENDED, before base): station phase for a husbandry whose
+--- storage WE built or augmented at onLoad (MARKER). Registration/wiring is left to the
+--- base finalize that runs right after -- it sees storage + stations non-nil and
+--- registers + wires them itself (we never re-run that registration).
 ---
---- ALL-OR-NOTHING: on any failure to fully build (nil node / unresolved fill types),
---- unsubscribe the built storage's FARM_DELETED subscription (leak hardening) and clear
---- Storage AND both stations so the base wires nothing. After a successful build, force the
---- slice-1 rate-recompute mitigation on this husbandry.
+--- AUGMENT path (the onLoad revert-record is parked on the placeable): sample the
+--- native-straw-intake flag BEFORE any station mutation, then augment the existing
+--- UnloadingStation (or build one), and reuse an existing LoadingStation COMPLETELY
+--- untouched (or build the trigger-less STRAW-seeded one). ALL-OR-NOTHING: on any failure
+--- BOTH the storage and the station end exactly as base built them (surgical reverts;
+--- a base object is never deleted or nil'd).
+---
+--- CLEAN-SLATE path: build BOTH stations; on any failure to fully build (nil node /
+--- unresolved fill types), unsubscribe the built storage's FARM_DELETED subscription
+--- (leak hardening) and clear Storage AND both stations so the base wires nothing.
+---
+--- After either path succeeds, force the slice-1 rate-recompute mitigation on
+--- this husbandry.
 ---@param self table the placeable
 local function husbandryOnFinalizePlacement(self)
     if not isLiveHusbandry(self) then
@@ -274,6 +541,120 @@ local function husbandryOnFinalizePlacement(self)
     if storage == nil or storage[MARKER] ~= true then
         return -- not our storage -- do not touch husbandries with real/other storage
     end
+
+    if self[AUGMENT_STATE] ~= nil then
+        -- ------------------------------------------------------------------
+        -- AUGMENT path: the onLoad augment succeeded; finish the station half.
+        -- ------------------------------------------------------------------
+        local state = self[AUGMENT_STATE]
+        if h.unloadingStation ~= nil and h.unloadingStation[MARKER] == true then
+            self[AUGMENT_STATE] = nil -- consume the stale record -- nothing here left to revert
+            return -- idempotent -- stations already augmented this load
+        end
+
+        local stationRecord = nil -- set once the pre-existing unloadingStation was augmented
+        local builtUnloading, builtLoading = nil, nil -- stations WE built THIS call
+
+        -- All-or-nothing: surgically undo every augment mutation so BOTH the storage and
+        -- the station end exactly as base built them. Mod-built stations carry no
+        -- subscriptions, so nil-ing ONLY the ones we built leaks nothing; a pre-existing
+        -- base object is NEVER nil'd or deleted.
+        local function abortAugment(reason)
+            -- A savegame level the base restore placed onto a type we are about to remove is
+            -- unavoidably discarded with it -- name the liters so the loss is never silent.
+            local discarded = 0
+            for _, fillType in ipairs(state.storage.addedTypes) do
+                discarded = discarded + (h.storage.fillLevels[fillType] or 0)
+            end
+            if discarded > 0 then
+                Log:warning("%s: %s -- reverting augment; discarding %.0f l of saved STRAW/MANURE",
+                    tostring(self.typeName), reason, discarded)
+            else
+                Log:warning("%s: %s -- leaving base storage/stations untouched",
+                    tostring(self.typeName), reason)
+            end
+            if stationRecord ~= nil then
+                revertStationAugment(h.unloadingStation, stationRecord)
+            end
+            if builtUnloading ~= nil and h.unloadingStation == builtUnloading then
+                h.unloadingStation = nil
+            end
+            if builtLoading ~= nil and h.loadingStation == builtLoading then
+                h.loadingStation = nil
+            end
+            revertStorageAugment(h.storage, state.storage)
+            self[AUGMENT_STATE] = nil
+            self[NATIVE_STRAW_INTAKE] = nil
+        end
+
+        local straw, manure = RmManureShared.resolveFillTypes()
+        if straw == nil or manure == nil then
+            abortAugment("STRAW/MANURE fill type unresolved")
+            return
+        end
+
+        -- Sample BEFORE any station mutation: the flag must record the husbandry's OWN
+        -- straw intake, never the support the augment is about to add.
+        self[NATIVE_STRAW_INTAKE] = h.unloadingStation ~= nil
+            and sampleNativeStrawIntake(h.unloadingStation, straw) or false
+
+        local node = self.components ~= nil and self.components[1] ~= nil and self.components[1].node or nil
+
+        local unloadingReused = h.unloadingStation ~= nil
+        if unloadingReused and h.unloadingStation.supportedFillTypes == nil then
+            -- Mirrors the storage-side shape gate: a modded/script-built station without its
+            -- supported-types table cannot be augmented safely, and a raw error here would
+            -- also block the base finalize that runs right after us.
+            abortAugment("station without supportedFillTypes (unexpected station shape)")
+            return
+        end
+        if unloadingReused then
+            stationRecord = augmentStation(h.unloadingStation, straw, manure)
+        else
+            if node == nil then
+                abortAugment("no component node for the unloading station")
+                return
+            end
+            builtUnloading = buildStrawStation(self, node, straw, manure)
+            h.unloadingStation = builtUnloading
+        end
+
+        -- A pre-existing loadingStation is reused COMPLETELY untouched (no MARKER, no fill
+        -- types): wired-ness never keys on the loadingStation MARKER, and straw stays
+        -- one-way IN because STRAW is never added to a trigger-bearing loadingStation's
+        -- supported types -- the producer draws straw through the storage->loadingStation
+        -- source link (base finalize wires it), which needs no fill-type support.
+        local loadingReused = h.loadingStation ~= nil
+        if not loadingReused then
+            if node == nil then
+                abortAugment("no component node for the loading station")
+                return
+            end
+            builtLoading = buildStrawLoadingStation(self, node, straw)
+            h.loadingStation = builtLoading
+        end
+
+        local addedNames = {}
+        for _, fillType in ipairs(state.storage.addedTypes) do
+            addedNames[#addedNames + 1] = fillType == straw and "STRAW"
+                or (fillType == manure and "MANURE" or tostring(fillType))
+        end
+        self[AUGMENT_STATE] = nil
+
+        -- Re-read the slice-1 curves now that the sink exists (see mitigation note above).
+        recomputeAnimalRates(self)
+
+        Log:info("augmented central storage for %s '%s' (added %s; unloadingStation %s; loadingStation %s)",
+            tostring(self.typeName), tostring(self:getName()),
+            #addedNames > 0 and table.concat(addedNames, "+") or "nothing",
+            unloadingReused and "reused" or "built",
+            loadingReused and "reused" or "built")
+        return
+    end
+
+    -- ----------------------------------------------------------------------
+    -- CLEAN-SLATE path: our onLoad-built storage; build BOTH stations.
+    -- ----------------------------------------------------------------------
     if h.unloadingStation ~= nil or h.loadingStation ~= nil then
         return -- idempotent -- stations already built
     end
@@ -304,7 +685,7 @@ local function husbandryOnFinalizePlacement(self)
     end
 
     local unloadingStation = buildStrawStation(self, node, straw, manure)
-    local loadingStation = buildStrawLoadingStation(self, node, straw, manure)
+    local loadingStation = buildStrawLoadingStation(self, node, straw)
     if unloadingStation == nil or loadingStation == nil then
         abort("station build failed")
         return
@@ -312,6 +693,9 @@ local function husbandryOnFinalizePlacement(self)
 
     h.unloadingStation = unloadingStation
     h.loadingStation = loadingStation
+    -- No pre-existing station -> no native straw intake; recorded explicitly (false, not
+    -- absent) so the divert and diagnostics always read a definite value.
+    self[NATIVE_STRAW_INTAKE] = false
 
     -- Re-read the slice-1 curves now that the sink exists (see mitigation note above).
     recomputeAnimalRates(self)
@@ -324,12 +708,13 @@ end
 -- ============================================================================
 -- POST-LOAD WARNING SWEEP (read-only diagnostic)
 --
--- An injected-set husbandry that DID own a central storage was skipped by the build gate
--- (hasNoHusbandryStorage was false). If that pre-existing storage cannot hold STRAW+MANURE
--- (a milk / liquid-manure-only husbandry riding a central store, common in mods), the mod
--- builds/mutates NOTHING on it (augment deferred) -- but the player should know it will not
--- collect manure. This standalone sweep classifies each such instance and logs one WARNING
--- plus a per-load summary.
+-- An injected-set husbandry whose central storage the augment path could NOT take (cannot
+-- isolate STRAW: single fill type / shared-pool native type; or an augment that had to
+-- abort and reverted) still shows the injected "Straw" line but collects no manure -- the
+-- player should know. This standalone sweep classifies each such instance (a MARKER'd
+-- built/augmented storage is excluded by the classifier's early-out) and logs one WARNING
+-- naming the skip reason, plus a per-load summary. The sweep itself mutates nothing --
+-- building/augmenting happened (or was skipped) back at onLoad/onFinalizePlacement.
 --
 -- Runs on the SAVEGAME_LOADED message (fires AFTER all savegame placeables have loaded --
 -- loadMapFinished is the terrain-init callback and fires BEFORE them). READ ONLY -- never
@@ -342,10 +727,11 @@ end
 -- the PoC test's logger-replacement counting trick cannot work in-game.
 -- ============================================================================
 
----Sweep every placed injected-set husbandry that owns a pre-existing central storage lacking
---- STRAW+MANURE; log one WARNING each and one per-load summary. Read-only.
+---Sweep every placed injected-set husbandry whose pre-existing central storage still
+--- lacks STRAW+MANURE (the augment was skipped or aborted); log one WARNING each naming
+--- the skip reason, and one per-load summary. Read-only.
 ---@param placeables table[]|nil defaults to g_currentMission.placeableSystem.placeables
----@return integer warned number of incompatible-storage husbandries warned about
+---@return integer warned number of could-not-augment husbandries warned about
 local function warnUnsupportedStorages(placeables)
     if placeables == nil then
         local mission = g_currentMission
@@ -362,18 +748,18 @@ local function warnUnsupportedStorages(placeables)
     for _, placeable in ipairs(placeables) do
         if isLiveHusbandry(placeable) then
             local h = placeable.spec_husbandry
-            if storageNeedsWarning(h.storage, straw, manure) then
+            local needsWarning, reason = storageNeedsWarning(h.storage, straw, manure)
+            if needsWarning then
                 warned = warned + 1
-                Log:warning("husbandry '%s' (%s) owns a central storage that cannot hold STRAW+MANURE -- "
-                    .. "left untouched; the mod cannot collect its manure (augment deferred)",
-                    tostring(placeable:getName()), tostring(placeable.typeName))
+                Log:warning("husbandry '%s' (%s): %s -- left untouched; the mod cannot collect its manure",
+                    tostring(placeable:getName()), tostring(placeable.typeName), tostring(reason))
             end
         end
     end
     -- Summary only when there is something to report: a "0 incompatible" line every single
     -- load (the common case) would be INFO noise.
     if warned > 0 then
-        Log:info("straw pipeline: %d husbandr%s own an incompatible central storage -- augment deferred",
+        Log:info("straw pipeline: %d husbandr%s own a central storage the mod could not augment",
             warned, warned == 1 and "y" or "ies")
     end
     return warned
@@ -629,19 +1015,31 @@ local function unsubscribeSweep()
     RmStrawSink.subscribed = false
 end
 
--- Expose the guards + the sweep for the fakes unit test (the pure decision logic + the
--- count-returning sweep). isLiveHusbandry reads RmSpecInjector.isInjected and the sweep
--- takes its placeable list as a param, so both drive off fakes the test injects.
+-- Expose the guards, the augment builders and the lifecycle wrappers for the fakes unit
+-- test (pure decision logic + the count-returning sweep + the build-or-augment flow).
+-- isLiveHusbandry reads RmSpecInjector.isInjected, the sweep takes its placeable list as
+-- a param, and the lifecycle wrappers take the placeable itself -- so all drive off fakes
+-- the test injects.
 RmStrawSink.isLiveHusbandry = isLiveHusbandry
 RmStrawSink.hasNoHusbandryStorage = hasNoHusbandryStorage
 RmStrawSink.storageNeedsWarning = storageNeedsWarning
 RmStrawSink.warnUnsupportedStorages = warnUnsupportedStorages
+RmStrawSink.storageCanIsolateStraw = storageCanIsolateStraw
+RmStrawSink.augmentStorage = augmentStorage
+RmStrawSink.revertStorageAugment = revertStorageAugment
+RmStrawSink.sampleNativeStrawIntake = sampleNativeStrawIntake
+RmStrawSink.augmentStation = augmentStation
+RmStrawSink.revertStationAugment = revertStationAugment
+RmStrawSink.husbandryOnLoad = husbandryOnLoad
+RmStrawSink.husbandryOnFinalizePlacement = husbandryOnFinalizePlacement
+RmStrawSink.AUGMENT_STATE = AUGMENT_STATE
 
 -- ============================================================================
 -- INSTALL (top-level, guarded once per process)
 --
--- onLoad is APPENDED (build storage after base sets up spec_husbandry); onFinalizePlacement
--- is PREPENDED (build stations before base wires them). SAVEGAME_LOADED subscribe/unsubscribe
+-- onLoad is APPENDED (build/augment storage after base sets up spec_husbandry);
+-- onFinalizePlacement is PREPENDED (build/augment stations before base registers + wires
+-- them). SAVEGAME_LOADED subscribe/unsubscribe
 -- are paired via BaseMission hooks. Guarded once so re-sourcing during testing cannot
 -- double-wrap or double-append.
 -- ============================================================================

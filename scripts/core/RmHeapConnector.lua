@@ -168,19 +168,31 @@ local function isOurWiredHusbandry(self)
         and h.loadingStation ~= nil
 end
 
----Count the EXTERNAL manure targets connected to a husbandry's manure UnloadingStation -- any
---- targetStorage that is NOT the husbandry's own internal storage. Used by the diagnostic and the
---- no-heap warning; a count of 0 is the genuine "manure is destroyed" case.
+---Count the EXTERNAL manure-capable targets connected to a husbandry's manure
+--- UnloadingStation: a targetStorage that is NOT the husbandry's own internal storage AND
+--- lists MANURE among its fill types. The manure scoping is load-bearing: with the
+--- augmented station's widened supported types, base finalize's extension pull can bring
+--- NON-heap extension storages (e.g. a straw-capable silo extension) into targetStorages,
+--- and counting one as a "heap" would silently suppress the honest manure-loss warning --
+--- a manure-capable external target genuinely catches manure, so the fill-type test is
+--- the exact semantic. Used by the diagnostic and the no-heap warning; a count of 0 is
+--- the genuine "manure is destroyed" case. manure nil -> 0 (callers resolve + gate; an
+--- unclassifiable world counts no heaps).
 ---@param station table|nil the husbandry's manure UnloadingStation
 ---@param internalStorage table|nil the husbandry's own internal Storage
+---@param manure integer|nil the resolved MANURE fill-type index
 ---@return integer
-local function connectedHeapCount(station, internalStorage)
+local function connectedHeapCount(station, internalStorage, manure)
+    if manure == nil then
+        return 0
+    end
     if station == nil or station.targetStorages == nil then
         return 0
     end
     local n = 0
     for storage, _ in pairs(station.targetStorages) do
-        if storage ~= internalStorage then
+        if storage ~= internalStorage
+            and storage.fillTypes ~= nil and storage.fillTypes[manure] ~= nil then
             n = n + 1
         end
     end
@@ -324,17 +336,19 @@ end
 
 ---Decide whether a husbandry should warn about lost manure, and record the per-husbandry state.
 --- Logs the honest straw-loss warning but does NOT emit the on-screen toast (the caller coalesces
---- that). RE-ARMS the one-time flag whenever the husbandry currently HAS a connected external
+--- that). RE-ARMS the one-time flag whenever the husbandry currently HAS a connected manure-capable
 --- target, so a husbandry that later loses its last heap warns again. Warns only for player-owned
---- husbandries that can actually produce. Returns true if it NEWLY warned this call.
+--- husbandries that can actually produce. Callers resolve MANURE and never call with nil (an
+--- unclassifiable world must not warn). Returns true if it NEWLY warned this call.
 ---@param husbandry table the placeable
+---@param manure integer the resolved MANURE fill-type index
 ---@return boolean warned
-local function warnIfHeapless(husbandry)
+local function warnIfHeapless(husbandry, manure)
     local h = husbandry.spec_husbandry
     if h == nil then
         return false -- defense-in-depth: callers gate via isOurWiredHusbandry, but never nil-deref here
     end
-    if connectedHeapCount(h.unloadingStation, h.storage) ~= 0 then
+    if connectedHeapCount(h.unloadingStation, h.storage, manure) ~= 0 then
         husbandry[NOHEAP_WARNED] = nil -- re-arm: manure is being collected again, clear any prior warning
         return false
     end
@@ -351,7 +365,8 @@ local function warnIfHeapless(husbandry)
 end
 
 ---Sweep every wired husbandry, warn (once each since it last had a heap) any that has no connected
---- heap, and emit ONE coalesced on-screen notification for the whole batch.
+--- heap, and emit ONE coalesced on-screen notification for the whole batch. Bails when MANURE is
+--- unresolved -- never warn on an unclassifiable world.
 ---@param deps table|nil
 local function warnHeaplessHusbandries(deps)
     deps = deps or liveDeps()
@@ -359,9 +374,14 @@ local function warnHeaplessHusbandries(deps)
     if placeables == nil then
         return
     end
+    local manure = RmHeapConnector.resolveManure()
+    if manure == nil then
+        Log:debug("heapless sweep skipped: MANURE fill type unresolved -- cannot classify heap targets")
+        return
+    end
     local warned = 0
     for _, placeable in ipairs(placeables) do
-        if isOurWiredHusbandry(placeable) and warnIfHeapless(placeable) then
+        if isOurWiredHusbandry(placeable) and warnIfHeapless(placeable, manure) then
             warned = warned + 1
         end
     end
@@ -398,8 +418,13 @@ function RmHeapConnector.reconnectHusbandry(husbandry, deps)
         Log:info("reconnect: husbandry '%s' picked up %d in-range heap(s) at placement",
             tostring(husbandry:getName()), pairsWired)
     end
-    if RmHeapConnector.savegameLoaded and warnIfHeapless(husbandry) then
-        notifyNoHeap(1, deps)
+    if RmHeapConnector.savegameLoaded then
+        -- Resolve for the scoped warn; wireAllHeaps above already WARNINGed when MANURE is
+        -- unresolved, so an unclassifiable world just skips the warn (never a false loss warning).
+        local manure = RmHeapConnector.resolveManure()
+        if manure ~= nil and warnIfHeapless(husbandry, manure) then
+            notifyNoHeap(1, deps)
+        end
     end
 end
 
@@ -426,12 +451,16 @@ function RmHeapConnector.consoleDump()
             local inPool = storageSystem.extendableUnloadingStations ~= nil
                 and storageSystem.extendableUnloadingStations[station] ~= nil
             local manureCapStr = "n/a" -- MANURE unresolved (broken registry) -> not a real "0"
-            if manure ~= nil and h.storage.capacities ~= nil then
-                manureCapStr = string.format("%.0f", h.storage.capacities[manure] or 0)
+            local heapCountStr = "n/a" -- same: an unclassifiable world cannot count heaps
+            if manure ~= nil then
+                if h.storage.capacities ~= nil then
+                    manureCapStr = string.format("%.0f", h.storage.capacities[manure] or 0)
+                end
+                heapCountStr = tostring(connectedHeapCount(station, h.storage, manure))
             end
-            Log:info("heap-diag: husbandry '%s' (%s) -- MANURE cap=%s supportsExtension=%s inExtendablePool=%s connectedHeaps=%d",
+            Log:info("heap-diag: husbandry '%s' (%s) -- MANURE cap=%s supportsExtension=%s inExtendablePool=%s connectedHeaps=%s",
                 tostring(placeable:getName()), tostring(placeable.typeName), manureCapStr,
-                tostring(station.supportsExtension), tostring(inPool), connectedHeapCount(station, h.storage))
+                tostring(station.supportsExtension), tostring(inPool), heapCountStr)
         end
     end
     if found == 0 then
