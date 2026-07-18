@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
-<modDesc descVersion="107">
+<modDesc descVersion="110">
     <author>Ritter</author>
-    <version>0.2.0.0</version>
+    <version>1.0.0.0</version>
     <title>
         <en>Manure For All</en>
     </title>
@@ -11,11 +11,10 @@ Make every animal husbandry produce collectable manure. Bed chickens, sheep, goa
 
 In the base game only cows, pigs and horses turn straw bedding into manure. Manure For All wires the same straw-to-manure pipeline onto every animal husbandry, including map- and mod-added animals. Nothing is replaced or edited: it augments the husbandries you already own and works with existing savegames.
 
-ALPHA RELEASE: tested in singleplayer and multiplayer, but expect rough edges - please report issues on GitHub. Debug logging is enabled in this build.
-
 Features:
 - All husbandries can consume straw bedding and produce collectable manure, regardless of animal type
 - If a husbandry has no straw tip point, tip bulk straw at its food point - food still feeds the animals
+- Each mod-enabled husbandry gets a straw storage sized to its food capacity, so the straw bar fits the barn
 - Produced manure is delivered to a player-placed manure heap near the husbandry
 - Warns on screen and in the log when a husbandry has no heap in range - manure is never lost silently
 - Straw use and manure output scale per animal from its food needs
@@ -28,6 +27,11 @@ Limitations: without a heap in range, produced manure is discarded hourly (with 
 Documentation: https://github.com/rittermod/FS25_ManureForAll
 
 Changelog:
+1.0.0.0 (Stable):
+- First stable release - out of alpha
+- Straw capacity on mod-enabled coops now scales to the coop's food capacity, so small coops no longer show an oversized straw bar
+- Debug logging is off during normal play
+
 0.2.0.0 (Alpha):
 - First public alpha
 - All husbandries now can consume straw bedding and produce collectable manure, regardless of animal type

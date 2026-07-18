@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0.0 (Stable - 2026-07-18)
+
+- First stable release - out of alpha
+- Straw capacity on mod-enabled coops now scales to the coop's food capacity, so small coops no longer show an oversized straw bar
+- Production build: debug logging is now off during normal play
+
 ## 0.2.0.0 (Alpha - 2026-07-05)
 
 - First public alpha
