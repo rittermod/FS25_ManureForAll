@@ -55,7 +55,14 @@ RmStrawSink.subscribed = RmStrawSink.subscribed or false
 -- Own logger: the `Log` in main.lua is a file-local and is not visible here.
 local Log = RmLogging.getLogger("ManureForAll")
 
-local STORAGE_CAPACITY = 100000 -- liters of STRAW held internally (MANURE is held at 0 -- see below)
+-- Internal STRAW capacity is derived per-placeable from its OWN food-trough capacity: the
+-- food value scaled by STRAW_FOOD_FACTOR, floored at STRAW_CAPACITY_FLOOR. Base straw runs
+-- ~0.28-0.63x food per animal, so factor 1.0 tracks food generously for the strawless coops
+-- we target without the absurd flat cap that dwarfs a tiny coop's bar. MANURE is held at 0
+-- (produced manure overflows to a connected heap -- see below). The floor is a deliberate
+-- USABILITY minimum (>= ~2 straw round bales at ~4000 l) so a bale always fits the smallest coops.
+local STRAW_FOOD_FACTOR = 1.0
+local STRAW_CAPACITY_FLOOR = 8000 -- liters; usability minimum, not a data-derived value
 local DEFAULT_ADD_LITERS = 1000 -- default deposit for `mfaAddStraw`
 -- Extension-connect radius for the manure UnloadingStation, in meters. Measured from the
 -- station's REUSED component rootNode (not the husbandry center), so kept generous so a heap
@@ -72,6 +79,17 @@ local NATIVE_STRAW_INTAKE = RmManureShared.NATIVE_STRAW_INTAKE
 -- finalize station phase (set by the augment branch of husbandryOnLoad; consumed AND
 -- cleared -- success or abort -- by husbandryOnFinalizePlacement). Never persisted.
 local AUGMENT_STATE = "rmStrawAugmentState"
+
+---Derive the internal STRAW storage capacity from the husbandry's OWN food-trough capacity:
+--- the food value scaled by STRAW_FOOD_FACTOR, floored at STRAW_CAPACITY_FLOOR so a straw bale
+--- always fits the smallest coops. Pure -- unit-tested without a live placeable. The math.floor
+--- is inert at factor 1.0 with integer food (food#capacity is XMLValueType.INT) but guards a
+--- future non-1.0 factor; a nil/0/negative food value floors to STRAW_CAPACITY_FLOOR.
+---@param foodCapacity number|nil the husbandry food-trough capacity
+---@return integer strawCapacity
+local function deriveStrawCapacity(foodCapacity)
+    return math.max(math.floor((foodCapacity or 0) * STRAW_FOOD_FACTOR), STRAW_CAPACITY_FLOOR)
+end
 
 -- ============================================================================
 -- OBJECT BUILDERS
@@ -92,10 +110,11 @@ local AUGMENT_STATE = "rmStrawAugmentState"
 ---@param self table the placeable
 ---@param straw integer
 ---@param manure integer
+---@param strawCapacity integer derived internal STRAW capacity (deriveStrawCapacity)
 ---@return table storage
-local function buildStrawStorage(self, straw, manure)
+local function buildStrawStorage(self, straw, manure, strawCapacity)
     local storage = Storage.new(self.isServer, self.isClient) --[[@as table]]
-    storage.capacity = STORAGE_CAPACITY
+    storage.capacity = strawCapacity
     storage.costsPerFillLevelAndDay = 0 -- the server hour-tick reads this; omit -> nil-crash ~1h after build
     storage.fillLevelSyncThreshold = 1
     storage.supportsMultipleFillTypes = true
@@ -104,7 +123,7 @@ local function buildStrawStorage(self, straw, manure)
     -- is skipped past the 0-free internal store (UnloadingStation distribution skips 0-free
     -- targets) and flows to the connected external heap instead of pooling uncollectably here.
     storage.fillTypes = { [straw] = true, [manure] = true }
-    storage.capacities = { [straw] = STORAGE_CAPACITY, [manure] = 0 }
+    storage.capacities = { [straw] = strawCapacity, [manure] = 0 }
     storage.fillLevels = { [straw] = 0, [manure] = 0 }
     storage.fillLevelsLastSynced = { [straw] = 0, [manure] = 0 }
     storage.fillLevelsLastPublished = { [straw] = 0, [manure] = 0 }
@@ -235,7 +254,8 @@ local function storageCanIsolateStraw(storage)
 end
 
 ---Add the MISSING of STRAW/MANURE to a pre-existing multi-fill-type storage, in fixed
---- order STRAW then MANURE. capacities[straw]=STORAGE_CAPACITY; the explicit
+--- order STRAW then MANURE. capacities[straw]=strawCapacity (the food-derived value threaded
+--- from husbandryOnLoad); the explicit
 --- capacities[manure]=0 is LOAD-BEARING: per-type free capacity only isolates when the
 --- capacity is set, so the 0 keeps manure free-capacity at 0 -- produced manure skips the
 --- internal store and flows to the connected heap instead of pooling uncollectably here.
@@ -247,13 +267,14 @@ end
 ---@param storage table pre-existing spec_husbandry.storage (storageCanIsolateStraw true)
 ---@param straw integer
 ---@param manure integer
+---@param strawCapacity integer derived internal STRAW capacity (deriveStrawCapacity)
 ---@return table record { addedTypes = { <the fill types actually added, in order> } }
-local function augmentStorage(storage, straw, manure)
+local function augmentStorage(storage, straw, manure, strawCapacity)
     local record = { addedTypes = {} }
     for _, fillType in ipairs({ straw, manure }) do
         if storage.fillTypes[fillType] ~= true then
             storage.fillTypes[fillType] = true
-            storage.capacities[fillType] = fillType == straw and STORAGE_CAPACITY or 0
+            storage.capacities[fillType] = fillType == straw and strawCapacity or 0
             storage.fillLevels[fillType] = 0
             storage.fillLevelsLastSynced[fillType] = 0
             storage.fillLevelsLastPublished[fillType] = 0
@@ -476,13 +497,28 @@ local function husbandryOnLoad(self)
     end
     local h = self.spec_husbandry
 
+    -- Derive the internal STRAW capacity ONCE from this husbandry's OWN food-trough capacity,
+    -- read straight from the placeable config XML (self.xmlFile is available before any onLoad).
+    -- We do NOT read self.spec_husbandryFood.capacity here: it is not populated yet (that spec's
+    -- own onLoad runs after this appended tail). The SAME value threads into both build paths so a
+    -- placeable's clean-slate and augment stores never disagree.
+    local foodCapacity
+    if self.xmlFile ~= nil then
+        foodCapacity = self.xmlFile:getValue("placeable.husbandry.food#capacity", 5000)
+    else
+        -- No config XML at onLoad is abnormal (a canceled/degenerate load); fall back to the floor.
+        Log:debug("%s has no xmlFile at onLoad -- using straw capacity floor", tostring(self.typeName))
+        foodCapacity = STRAW_CAPACITY_FLOOR
+    end
+    local strawCapacity = deriveStrawCapacity(foodCapacity)
+
     if hasNoHusbandryStorage(h) then
         local straw, manure = RmManureShared.resolveFillTypes()
         if straw == nil or manure == nil then
             Log:warning("STRAW/MANURE fill type unresolved; skipping storage build for %s", tostring(self.typeName))
             return
         end
-        h.storage = buildStrawStorage(self, straw, manure)
+        h.storage = buildStrawStorage(self, straw, manure, strawCapacity)
         Log:debug("assigned straw/manure Storage to %s at onLoad", tostring(self.typeName))
         return
     end
@@ -501,7 +537,7 @@ local function husbandryOnLoad(self)
                 tostring(self.typeName), tostring(reason))
             return
         end
-        self[AUGMENT_STATE] = { storage = augmentStorage(h.storage, straw, manure) }
+        self[AUGMENT_STATE] = { storage = augmentStorage(h.storage, straw, manure, strawCapacity) }
         Log:debug("augmented central storage of %s at onLoad (%d fill type(s) added)",
             tostring(self.typeName), #self[AUGMENT_STATE].storage.addedTypes)
         return
@@ -1020,6 +1056,7 @@ end
 -- isLiveHusbandry reads RmSpecInjector.isInjected, the sweep takes its placeable list as
 -- a param, and the lifecycle wrappers take the placeable itself -- so all drive off fakes
 -- the test injects.
+RmStrawSink.deriveStrawCapacity = deriveStrawCapacity
 RmStrawSink.isLiveHusbandry = isLiveHusbandry
 RmStrawSink.hasNoHusbandryStorage = hasNoHusbandryStorage
 RmStrawSink.storageNeedsWarning = storageNeedsWarning
