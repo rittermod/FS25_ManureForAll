@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="110">
     <author>Ritter</author>
-    <version>1.0.0.0</version>
+    <version>1.0.1.0-dev.1</version>
     <title>
         <en>Manure For All</en>
     </title>
@@ -42,7 +42,7 @@ Changelog:
 - Kept animals that already produce manure (cow, pig, horse) and mods that define their own production (e.g. RealisticLivestock) untouched
 - Kept the existing straw intake on husbandries that already have one, never adding a second straw path
 - Added multiplayer support, tested on host, client, and dedicated server
-        ]]></en>
+        ]]>        </en>
     </description>
 
     <iconFilename>icon_manureForAll.dds</iconFilename>
