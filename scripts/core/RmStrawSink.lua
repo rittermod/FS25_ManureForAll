@@ -25,6 +25,14 @@
         mutations. A storage that cannot isolate STRAW (single fill type, or a native type
         drawing on the shared capacity pool) is skipped whole and warned by the post-load
         sweep -- no partial wiring.
+      * STATION-ONLY (declares one or both stations but NO central storage): BUILD the
+        STRAW+MANURE Storage at onLoad exactly as the clean-slate path does, from the same
+        food-derived capacity, then take the AUGMENT station phase above -- which reuses and
+        augments the station(s) base already loaded and builds only a genuinely missing one.
+        A shipped chicken shed has this shape, bought or map-preplaced, so it is a real
+        case rather than a degenerate one worth skipping. The
+        parked record says BUILT rather than augmented, so the abort drops the storage whole
+        instead of removing fill types from a store it is about to discard.
 
     The LoadingStation is REQUIRED for manure: without one, nothing draws the stored straw
     down, so the straw bar fills and stays full and no manure is ever produced. With one
@@ -77,9 +85,18 @@ local MARKER = RmManureShared.MARKER
 -- Per-placeable native-straw-intake flag name (shared home; RmTroughDivert reads it).
 -- Runtime-only, never persisted; sampled BEFORE the mod adds STRAW to a station.
 local NATIVE_STRAW_INTAKE = RmManureShared.NATIVE_STRAW_INTAKE
--- Runtime-only field on the placeable carrying the onLoad storage revert-record to the
--- finalize station phase (set by the augment branch of husbandryOnLoad; consumed AND
--- cleared -- success or abort -- by husbandryOnFinalizePlacement). Never persisted.
+-- Runtime-only field on the placeable carrying the onLoad storage record to the finalize station
+-- phase (set by the augment AND station-only branches of husbandryOnLoad; consumed AND cleared --
+-- success or abort -- by husbandryOnFinalizePlacement). Never persisted.
+--
+-- Record shape -- EXACTLY ONE of the two is present, and every reader must branch on it:
+--   * `storage`      the augmentStorage record, present when an EXISTING storage was mutated in
+--                    place. Names the fill types we added, so the revert can remove exactly those.
+--   * `builtStorage` true when the storage was BUILT whole by the station-only branch. There is no
+--                    augment record because nothing was mutated -- the correct revert is to drop
+--                    the storage entirely, which is what the clean-slate abort already does.
+-- The built record is written as `{ builtStorage = true }` with no `storage` key: a nil value in a
+-- Lua table constructor stores nothing, so spelling `storage = nil` would be a no-op, not a field.
 local AUGMENT_STATE = "rmStrawAugmentState"
 
 ---Derive the internal STRAW storage capacity from the husbandry's OWN food-trough capacity:
@@ -395,10 +412,12 @@ end
 --- on WATER. loadTriggers is deliberately NOT read -- a load trigger offers only the fill types IT
 --- declares, so STRAW on a trigger-bearing station is not withdrawable at those triggers.
 ---
---- `storage` is the POST-augment storage: this runs after augmentStorage has added STRAW, and the
---- answer is meaningless against the pre-augment shape. Pure; exposed for the unit test.
+--- `storage` is the POST-BUILD-OR-AUGMENT storage: this runs after onLoad has either added STRAW
+--- to an existing storage or built a STRAW+MANURE one outright, and the answer is meaningless
+--- against the pre-onLoad shape. Both origins present the same {STRAW, MANURE} membership to the
+--- test below, so the body needs no branch. Pure; exposed for the unit test.
 ---@param loadingStation table|nil a pre-existing LoadingStation
----@param storage table|nil the POST-augment spec_husbandry.storage
+---@param storage table|nil the POST-build-or-augment spec_husbandry.storage
 ---@return boolean needsSeed
 ---@return string|nil reason why not, when false (nil when true)
 local function loadingStationNeedsStrawSeed(loadingStation, storage)
@@ -476,12 +495,26 @@ end
 ---STRUCTURAL "owns none of storage/unloadingStation/loadingStation" test: true only for a
 --- husbandry that declares no central storage of its own -- the CLEAN-SLATE build case.
 --- An instance that owns a central storage is the AUGMENT case (mutated in place, never
---- overwritten); storage nil with a station present is a degenerate modded shape left
---- untouched. Not a straw test -- purely storage presence.
+--- overwritten); storage nil with a station present is the STATION-ONLY case, which builds the
+--- storage and then takes the augment station phase (hasStationsButNoStorage). Not a straw test
+--- -- purely storage presence.
 ---@param h table spec_husbandry
 ---@return boolean
 local function hasNoHusbandryStorage(h)
     return h.storage == nil and h.unloadingStation == nil and h.loadingStation == nil
+end
+
+---STRUCTURAL "declares stations but no central storage" test -- the sibling of
+--- hasNoHusbandryStorage over the storage-nil half, and the exact gap between the clean-slate and
+--- augment branches. A shipped chicken shed lands here (both stations declared, no <storage>),
+--- so this is a real shape rather than a modded curiosity. Deliberately NOT
+--- nil-guarded on `h`: the sibling above indexes `h` unguarded and the only call site has already
+--- dereferenced self.spec_husbandry, so a guard here would be dead code that breaks the symmetry.
+--- Pure; exposed for the unit test.
+---@param h table spec_husbandry
+---@return boolean
+local function hasStationsButNoStorage(h)
+    return h.storage == nil and (h.unloadingStation ~= nil or h.loadingStation ~= nil)
 end
 
 ---True if a pre-existing (non-mod) central storage cannot hold BOTH STRAW and MANURE --
@@ -579,13 +612,16 @@ end
 ---onLoad (APPENDED, after base): make sure an injected-set husbandry ends with a
 --- STRAW+MANURE-capable storage BEFORE the base savegame loadFromXMLFile runs, so saved
 --- straw/manure levels round-trip (the base restore drops a saved level whose fill type
---- is absent from fillLevels). Three shapes:
+--- is absent from fillLevels). Four shapes:
 ---   * owns nothing -> CLEAN-SLATE build (assign a fresh mod storage);
+---   * declares a station but NO storage -> STATION-ONLY build: assign the same fresh mod
+---     storage, then park a BUILT record so the finalize station phase takes the augment
+---     arm and reuses the station(s) base already loaded;
 ---   * owns a central storage that is not ours/augmented this load -> AUGMENT it in place
 ---     when it can isolate STRAW, parking the revert-record on the placeable for the
 ---     finalize station phase; a cannot-isolate storage is skipped whole -- the
 ---     SAVEGAME_LOADED sweep owns the once-per-load WARNING, so no double-warn here;
----   * storage nil but some station exists (degenerate modded shape) -> left untouched.
+---   * the storage is already ours this load -> nothing to do.
 --- Runs identically per-peer.
 ---@param self table the placeable
 local function husbandryOnLoad(self)
@@ -620,6 +656,28 @@ local function husbandryOnLoad(self)
         return
     end
 
+    if hasStationsButNoStorage(h) then
+        -- Base loaded station state but no <storage>, so neither existing branch fits: the
+        -- clean-slate predicate is false (a station is present) and the augment branch has no
+        -- storage to mutate. Build the storage exactly as the clean-slate path does -- same
+        -- builder, same food-derived capacity, so a placeable's store never depends on which
+        -- branch reached it -- and park a BUILT record. The finalize station phase then takes the
+        -- augment arm, which reuses and augments what base loaded and builds only what is missing.
+        local straw, manure = RmManureShared.resolveFillTypes()
+        if straw == nil or manure == nil then
+            Log:warning("STRAW/MANURE fill type unresolved; skipping storage build for %s", tostring(self.typeName))
+            return
+        end
+        h.storage = buildStrawStorage(self, straw, manure, strawCapacity)
+        -- ONE field: `storage` is deliberately absent, which is what marks this record BUILT.
+        self[AUGMENT_STATE] = { builtStorage = true }
+        Log:debug("built straw/manure Storage for station-only %s at onLoad "
+            .. "(unloadingStation %s, loadingStation %s)", tostring(self.typeName),
+            h.unloadingStation ~= nil and "present" or "absent",
+            h.loadingStation ~= nil and "present" or "absent")
+        return
+    end
+
     if h.storage ~= nil and h.storage[MARKER] ~= true then
         local straw, manure = RmManureShared.resolveFillTypes()
         if straw == nil or manure == nil then
@@ -640,9 +698,13 @@ local function husbandryOnLoad(self)
         return
     end
 
-    -- Storage nil with a station present (degenerate modded shape), or the storage is
-    -- already ours this load -- nothing to build or augment.
-    Log:debug("%s owns station state the mod does not build on or augment -- not wiring",
+    -- The storage is already ours this load (a second onLoad within one load sequence), so it
+    -- was built or augmented above and carries the MARKER -- nothing left to do. The three
+    -- branches above are exhaustive over the rest of the shape space: storage nil with no
+    -- stations, storage nil with a station, and a storage that is not ours. A benign idempotent
+    -- re-entry stays at DEBUG rather than WARNING; a tester-facing channel needs a baseline of
+    -- zero expected noise.
+    Log:debug("%s storage is already ours this load -- nothing to build or augment",
         tostring(self.typeName))
 end
 
@@ -659,6 +721,13 @@ end
 --- the trigger-less STRAW-seeded one when there is none). ALL-OR-NOTHING: on any failure the
 --- storage, the station and the seed all end exactly as base built them (surgical reverts;
 --- a base object is never deleted or nil'd).
+---
+--- The same arm serves the STATION-ONLY shape, whose parked record says the storage was BUILT
+--- rather than augmented. Only the STORAGE half of the revert differs: a built storage is
+--- dropped whole (and its FARM_DELETED subscription released) instead of having named fill types
+--- removed, because there is no native content in it to preserve. The station half -- the
+--- augment, the seed, the built-station nils -- is identical, which is the whole reason this
+--- shape routes here rather than into a third station phase.
 ---
 --- CLEAN-SLATE path: build BOTH stations; on any failure to fully build (nil node /
 --- unresolved fill types), unsubscribe the built storage's FARM_DELETED subscription
@@ -696,15 +765,38 @@ local function husbandryOnFinalizePlacement(self)
         -- subscriptions, so nil-ing ONLY the ones we built leaks nothing; a pre-existing
         -- base object is NEVER nil'd or deleted.
         local function abortAugment(reason)
-            -- A savegame level the base restore placed onto a type we are about to remove is
-            -- unavoidably discarded with it -- name the liters so the loss is never silent.
+            -- A savegame level the base restore placed onto a storage we are about to drop or
+            -- shrink is unavoidably discarded with it -- name the liters so the loss is never
+            -- silent. This tally is NOT skippable on the built leg: the savegame loadFromXMLFile
+            -- runs BETWEEN onLoad and onFinalizePlacement, so on any reload of a save holding
+            -- straw the built storage IS full by the time an abort can fire.
             local discarded = 0
-            for _, fillType in ipairs(state.storage.addedTypes) do
-                discarded = discarded + (h.storage.fillLevels[fillType] or 0)
+            if state.builtStorage then
+                -- The whole storage is being dropped, so every liter in it goes with it.
+                for _, level in pairs(h.storage.fillLevels) do
+                    discarded = discarded + (level or 0)
+                end
+            else
+                -- Only the types we added are removed; the native levels survive the revert.
+                for _, fillType in ipairs(state.storage.addedTypes) do
+                    discarded = discarded + (h.storage.fillLevels[fillType] or 0)
+                end
             end
-            if discarded > 0 then
+            if discarded > 0 and state.builtStorage then
+                Log:warning("%s: %s -- dropping the storage the mod built; discarding %.0f l of saved STRAW/MANURE",
+                    tostring(self.typeName), reason, discarded)
+            elseif discarded > 0 then
+                -- This arm keeps its original wording deliberately: "augment" is what tells a
+                -- reader WHICH leg reverted, and the built leg above now carries its own line
+                -- rather than borrowing this one. (The success Log:info further down is a
+                -- different matter - it gains a storage-origin field by design.)
                 Log:warning("%s: %s -- reverting augment; discarding %.0f l of saved STRAW/MANURE",
                     tostring(self.typeName), reason, discarded)
+            elseif state.builtStorage then
+                -- Never claim the storage was left untouched here: the mod just dropped one it
+                -- built itself. Only the base STATIONS end untouched on this leg.
+                Log:warning("%s: %s -- dropping the storage the mod built; base stations untouched",
+                    tostring(self.typeName), reason)
             else
                 Log:warning("%s: %s -- leaving base storage/stations untouched",
                     tostring(self.typeName), reason)
@@ -723,7 +815,18 @@ local function husbandryOnFinalizePlacement(self)
             if builtLoading ~= nil and h.loadingStation == builtLoading then
                 h.loadingStation = nil
             end
-            revertStorageAugment(h.storage, state.storage)
+            if state.builtStorage then
+                -- Nothing to unpick: the storage is entirely ours, so drop it whole, exactly as
+                -- the clean-slate abort does. Release the FARM_DELETED subscription first --
+                -- buildStrawStorage took it out and the storage is never delete()d here, so
+                -- skipping this leaks a subscriber wrapping an orphaned storage.
+                if h.storage ~= nil and g_messageCenter ~= nil then
+                    g_messageCenter:unsubscribe(MessageType.FARM_DELETED, h.storage)
+                end
+                h.storage = nil
+            else
+                revertStorageAugment(h.storage, state.storage)
+            end
             self[AUGMENT_STATE] = nil
             self[NATIVE_STRAW_INTAKE] = nil
         end
@@ -790,19 +893,36 @@ local function husbandryOnFinalizePlacement(self)
             end
         end
 
-        local addedNames = {}
-        for _, fillType in ipairs(state.storage.addedTypes) do
-            addedNames[#addedNames + 1] = fillType == straw and "STRAW"
-                or (fillType == manure and "MANURE" or tostring(fillType))
+        -- THIRD reader of the parked record, and the one that runs on the SUCCESS path. Indexing
+        -- state.storage unbranched here would raise on every station-only husbandry -- and because
+        -- this hook is PREPENDED, that raise stops base onFinalizePlacement and the placeable is
+        -- never registered at all, which is strictly worse than the bug being fixed.
+        local addedLabel
+        if state.builtStorage then
+            -- A built storage was created holding exactly these two, so there is no record to
+            -- loop over and nothing to derive: the label is the literal pair.
+            addedLabel = "STRAW+MANURE"
+        else
+            local addedNames = {}
+            for _, fillType in ipairs(state.storage.addedTypes) do
+                addedNames[#addedNames + 1] = fillType == straw and "STRAW"
+                    or (fillType == manure and "MANURE" or tostring(fillType))
+            end
+            addedLabel = #addedNames > 0 and table.concat(addedNames, "+") or "nothing"
         end
         self[AUGMENT_STATE] = nil
 
         -- Re-read the injected curves now that the sink exists (see mitigation note above).
         recomputeAnimalRates(self)
 
-        Log:info("augmented central storage for %s '%s' (added %s; unloadingStation %s; loadingStation %s)",
-            tostring(self.typeName), tostring(self:getName()),
-            #addedNames > 0 and table.concat(addedNames, "+") or "nothing",
+        -- Only the leading verb varies: `augmented` reproduces this line BYTE-IDENTICALLY to what
+        -- it emitted before this ticket, so anything already keyed on it keeps matching, and
+        -- `built` is the same lower-case vocabulary the station halves use later on the line. The
+        -- CLEAN-SLATE shape has its own separate line at the bottom of this function -- keeping
+        -- this one's distinct opening is what stops a log scan conflating the two.
+        Log:info("%s central storage for %s '%s' (added %s; unloadingStation %s; loadingStation %s)",
+            state.builtStorage and "built" or "augmented",
+            tostring(self.typeName), tostring(self:getName()), addedLabel,
             unloadingReused and "reused" or "built",
             loadingReused and (loadingSeeded and "reused + STRAW-seeded" or "reused") or "built")
         return
@@ -1211,6 +1331,7 @@ end
 RmStrawSink.deriveStrawCapacity = deriveStrawCapacity
 RmStrawSink.isLiveHusbandry = isLiveHusbandry
 RmStrawSink.hasNoHusbandryStorage = hasNoHusbandryStorage
+RmStrawSink.hasStationsButNoStorage = hasStationsButNoStorage
 RmStrawSink.storageNeedsWarning = storageNeedsWarning
 RmStrawSink.storageIsLoadingSource = storageIsLoadingSource
 RmStrawSink.warnUnsupportedStorages = warnUnsupportedStorages
