@@ -2,8 +2,8 @@
     RmManureForAll.lua
 
     Main module for ManureForAll mod -- thin by design: mod-level lifecycle
-    markers and the version log. The feature logic lives in scripts/core/,
-    each module installing its own hooks when sourced (before this file).
+    markers. The feature logic lives in scripts/core/, each module installing
+    its own hooks when sourced (before this file).
 
     This file is loaded by scripts/main.lua.
 
@@ -43,6 +43,3 @@ BaseMission.delete = Utils.appendedFunction(
     BaseMission.delete,
     onDeleteMap
 )
-
-Log:info("ManureForAll mod loaded (v%s)",
-    g_modManager:getModByName(RmManureForAll.modName).version)
