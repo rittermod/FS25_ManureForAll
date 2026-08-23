@@ -27,6 +27,10 @@ Limitations: without a heap in range, produced manure is discarded hourly (with 
 Documentation: https://github.com/rittermod/FS25_ManureForAll
 
 Changelog:
+1.0.1.0-dev.1:
+- Fixed animal buildings whose straw bar filled to the top but never produced any manure
+- Fixed animal buildings that never got a straw storage, so they could not produce manure
+
 1.0.0.0 (Stable - 2026-07-18):
 - Changed from Alpha to Stable
 - Changed straw capacity on mod-enabled coops to scale with the coop's food capacity, so small coops no longer show an oversized straw bar

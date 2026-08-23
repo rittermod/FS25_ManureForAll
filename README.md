@@ -2,7 +2,7 @@
 
 [![Download Latest Release](https://img.shields.io/badge/Download-Latest_Release-orange?style=for-the-badge&logo=github)](https://github.com/rittermod/FS25_ManureForAll/releases/latest/download/FS25_ManureForAll.zip)
 
-Make every animal husbandry produce collectable manure. Bed chickens, sheep, goats and pastured animals with straw at the food trough and collect manure from a heap - just like cows, pigs and horses.
+Make every animal husbandry produce collectable manure. Bed chickens, sheep, goats and pastured animals with straw at the food point and collect manure from a heap - just like cows, pigs and horses.
 
 In the base game only cows, pigs and horses turn straw bedding into manure. Manure For All wires the same straw-to-manure pipeline onto every animal husbandry - chicken coops, sheep and goat barns, and all open pastures, including map- and mod-added animals. No building is replaced and no map is edited: the mod augments the husbandries you already own, at load time, and works with existing savegames.
 
