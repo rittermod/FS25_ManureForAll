@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.1.0-dev.1:
+## 1.0.1.0 (Stable - 2026-08-28):
 - Fixed animal buildings whose straw bar filled to the top but never produced any manure
 - Fixed animal buildings that never got a straw storage, so they could not produce manure
 

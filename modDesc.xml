@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="110">
     <author>Ritter</author>
-    <version>1.0.1.0-dev.1</version>
+    <version>1.0.1.0</version>
     <title>
         <en>Manure For All</en>
     </title>
@@ -27,7 +27,7 @@ Limitations: without a heap in range, produced manure is discarded hourly (with 
 Documentation: https://github.com/rittermod/FS25_ManureForAll
 
 Changelog:
-1.0.1.0-dev.1:
+1.0.1.0 (Stable - 2026-08-28):
 - Fixed animal buildings whose straw bar filled to the top but never produced any manure
 - Fixed animal buildings that never got a straw storage, so they could not produce manure
 
