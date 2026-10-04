@@ -12,7 +12,7 @@ In the base game only cows, pigs and horses turn straw bedding into manure. Manu
 - **Straw in at the food point** - if a husbandry has no straw tip point, tip bulk straw at its food point; it is stored as bedding while food still feeds the animals
 - **Right-sized straw storage** - each mod-enabled husbandry gets its own straw storage, sized to its food capacity (at least ~8000 L), so the straw bar fits the barn
 - **Manure out at a heap** - produced manure is delivered to a player-placed manure heap near the husbandry
-- **Honest warnings** - on-screen and log warning when a producing husbandry has no manure heap in range, so manure is never lost silently
+- **Honest warnings** - a log warning when a producing husbandry has no manure heap in range, plus an on-screen notice when you place a husbandry without one or remove its last heap, so manure is never lost silently
 - **Per-animal scaling** - straw use and manure output scale per animal from its food needs; map- and mod-added animals are covered automatically
 - **Plays nice with others** - animals that already produce manure (cow, pig, horse) and mods that define their own production (e.g. RealisticLivestock) are never overridden
 - **Multiplayer** - tested on host, client, and dedicated server

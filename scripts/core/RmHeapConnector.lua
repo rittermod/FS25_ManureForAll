@@ -1,62 +1,22 @@
 --[[
     RmHeapConnector.lua
 
-    Reconnect a mod-wired husbandry's manure UnloadingStation to in-range player-placed
-    manure heaps, and warn honestly when there is no heap to catch the manure.
+    Connects the manure station of each mod-wired husbandry to player-placed manure heaps in range,
+    and warns when a husbandry has no heap to catch its manure.
 
-    RmStrawSink + RmTroughDivert build a runtime STRAW+MANURE Storage +
-    UnloadingStation + LoadingStation on strawless husbandries, MARKER-tagged and registered in
-    the extendable-station pool with the internal MANURE capacity at 0 (base-cattleshed-consistent).
-    Produced manure then flows OUT to a player-placed external manure heap and is collected at the
-    heap's own load trigger -- no building i3d edit, node-free on the husbandry side.
+    A heap placed after its husbandry connects on its own. This module covers the other orders:
+      * a server-only pass on SAVEGAME_LOADED (placeables are not loaded yet at loadMapFinished);
+      * a scoped pass when a husbandry is placed after existing heaps;
+      * a re-sweep when a heap is deleted, so a husbandry that lost its last heap warns again;
+      * a re-sweep when a heap is placed, clearing the warned flag of a husbandry it connected.
 
-    Base husbandries auto-connect to in-range heaps at heap placement, but load-order can break that
-    (a heap placed before the husbandry, a reload) -- so a load-order-proof reconnect pass is needed.
-    This module is that safety net for OUR stations, self-contained:
-      * a SERVER-ONLY post-load pass (MessageType.SAVEGAME_LOADED -- which fires AFTER savegame
-        placeables load; BaseMission.loadMapFinished is the terrain-init callback and fires BEFORE
-        them, so a pass there would see no placeables) rewires OUR husbandry<->heap pairs + warns;
-      * an appended husbandry onFinalizePlacement pulls in existing in-range heaps for a husbandry
-        placed AFTER a heap (heap-placed-after-husbandry is handled by base auto-connect at the
-        heap's own finalize, which discovers our extendable husbandry station);
-      * an appended PlaceableManureHeap onDelete re-sweeps so a husbandry that lost its last heap
-        warns again;
-      * an appended PlaceableManureHeap onFinalizePlacement re-sweep (a HARDENING over the
-        prototype): base auto-connect runs no mod code, so a previously-warned husbandry
-        that gains a heap keeps its one-time flag set and would NEVER re-warn after that heap is
-        later deleted -- running the sweep on heap finalize re-arms the flag while connected.
+    Rules: wire on the server only (storage links replicate to clients); wire only stations that
+    carry our MARKER; skip pairs already linked; always pass the heap's world position to the range
+    query.
 
-    Correctness (verified in-game):
-      * SERVER-ONLY (g_server): storage wiring is server-authoritative and replicates to clients
-        via base storage sync; a client-side wire diverges target lists.
-      * OURS-ONLY: getExtendableUnloadingStationsInRange returns ALL extendable stations incl.
-        base barns'; wire only stations we marked (station[MARKER]) -- base barns are base's job,
-        and re-publishing their links would desync.
-      * IDEMPOTENT: addStorageToUnloadingStation re-publishes on every call, so skip a pair
-        already wired (reverse-link heapStorage.unloadingStations[station] ~= nil).
-      * the 5-arg getExtendableUnloadingStationsInRange(heapStorage, farmId, hx, hy, hz) with the
-        heap's WORLD position -- the position is REQUIRED: a nil makes the in-range compare error,
-        so we always resolve and pass it.
-      * MANURE resolved via RmManureShared + guarded; entityExists(node) guarded (a reused node may
-        be freed mid-delete); holds no cached refs (reads the live placeableSystem each pass).
-
-    No heap in range = an honest loss: with internal MANURE capacity 0 and no connected heap the
-    base producer consumes straw then discards the manure every hour (base-consistent), so a
-    warning per player-owned heap-less husbandry tells the player to place a heap -- the loss is
-    never shipped silently. The warning is one-time per husbandry while it stays heap-less (re-warns
-    once per load: honest reminder), RE-ARMS when a heap connects, and fires again if the husbandry
-    later loses its last heap. Fired only after the savegame is fully loaded, so a reload raises no
-    false loss warnings. Dedicated-server players get no toast (log-only; a client notification needs
-    a sync event, not yet implemented); a listen-server host may see coalesced toasts about other farms.
-
-    Deviations from the prototype this module productionizes:
-      * console lifecycle (addModEventListener + register/remove) NOT ported -- the console
-        shell (RmManureConsole) owns registration; `mfaDump heaps` delegates here;
-      * the `rmManureHeap reconnect` force-pass console action NOT ported -- save+reload is the
-        contracted operator recovery (the SAVEGAME_LOADED pass re-derives all links);
-      * the local resolveManureType NOT ported -- MANURE comes from RmManureShared.resolveFillTypes
-        with a call-site WARNING when unresolved;
-      * ADDED the heap-finalize re-arm sweep (hardening, above).
+    No heap in range means produced manure is discarded every hour. Each heap-less, player-owned
+    husbandry logs one warning, again on every load, and re-arms once a heap connects. The
+    on-screen notice fires only for in-session changes and never on a dedicated server.
 
     Author: Ritter
 ]]
@@ -168,16 +128,7 @@ local function isOurWiredHusbandry(self)
         and h.loadingStation ~= nil
 end
 
----Count the EXTERNAL manure-capable targets connected to a husbandry's manure
---- UnloadingStation: a targetStorage that is NOT the husbandry's own internal storage AND
---- lists MANURE among its fill types. The manure scoping is load-bearing: with the
---- augmented station's widened supported types, base finalize's extension pull can bring
---- NON-heap extension storages (e.g. a straw-capable silo extension) into targetStorages,
---- and counting one as a "heap" would silently suppress the honest manure-loss warning --
---- a manure-capable external target genuinely catches manure, so the fill-type test is
---- the exact semantic. Used by the diagnostic and the no-heap warning; a count of 0 is
---- the genuine "manure is destroyed" case. manure nil -> 0 (callers resolve + gate; an
---- unclassifiable world counts no heaps).
+---Count linked external storages that accept MANURE (a linked straw extension is not a heap). 0 if manure nil.
 ---@param station table|nil the husbandry's manure UnloadingStation
 ---@param internalStorage table|nil the husbandry's own internal Storage
 ---@param manure integer|nil the resolved MANURE fill-type index
@@ -226,11 +177,10 @@ local function wireHeapToOurStations(storageSystem, heapStorage, farmId, hx, hy,
         elseif onlyStation ~= nil and station ~= onlyStation then
             -- Scoped (husbandry-finalize) variant: another husbandry's station, not this one -- quiet skip.
         elseif not RmHeapConnector.entityExists(station.rootNode) then
-            -- Belt-and-suspenders: base delete unregisters the station from the pool, so a freed
-            -- station should not appear here; guard anyway before touching its node.
+            -- Never touch a freed station node.
             Log:debug("reconnect skip: station node no longer exists -- not wiring")
         elseif heapStorage.unloadingStations[station] ~= nil then
-            -- Reverse-link idempotency: addStorageToUnloadingStation re-publishes every call.
+            -- Already linked: skip, so each pair is added exactly once.
             Log:debug("reconnect skip: pair already wired -- idempotent")
         else
             storageSystem:addStorageToUnloadingStation(heapStorage, station)
@@ -296,8 +246,7 @@ local function notifyNoHeap(count, deps)
     if count <= 0 then
         return
     end
-    -- A dedicated server has no HUD (addIngameNotification -> hud:addSideNotification would nil-crash);
-    -- the per-husbandry Log:warning is the record there. Per-farm client delivery is a later (MP) phase.
+    -- A dedicated server has no HUD to show it; the per-husbandry Log:warning is the record there.
     if RmHeapConnector.isDedicatedServer() then
         return
     end
@@ -319,10 +268,7 @@ local function notifyNoHeap(count, deps)
     notifier:addIngameNotification(FSBaseMission.INGAME_NOTIFICATION_CRITICAL, text)
 end
 
----True only for a husbandry owned by a REAL player farm, so it can house animals and actually
---- produce. A map-preplaced husbandry remapped EVERYONE->NOBODY at base finalize has no real owner
---- farm, never connects a heap, and produces nothing -- so it must not raise a false "place a heap"
---- warning.
+---True only for a husbandry owned by a real farm; a map-preplaced one has no owner farm and never produces.
 ---@param husbandry table
 ---@return boolean
 local function isPlayerOwnedHusbandry(husbandry)
@@ -364,20 +310,20 @@ local function warnIfHeapless(husbandry, manure)
     return true
 end
 
----Sweep every wired husbandry, warn (once each since it last had a heap) any that has no connected
---- heap, and emit ONE coalesced on-screen notification for the whole batch. Bails when MANURE is
---- unresolved -- never warn on an unclassifiable world.
+---Log-warn each wired husbandry newly found heap-less. Emits no toast; the caller decides.
 ---@param deps table|nil
+---@return integer warned husbandries newly found heap-less this sweep
 local function warnHeaplessHusbandries(deps)
     deps = deps or liveDeps()
     local placeables = deps.placeables
     if placeables == nil then
-        return
+        Log:trace("<<< warnHeaplessHusbandries = 0 (no placeables)")
+        return 0
     end
     local manure = RmHeapConnector.resolveManure()
     if manure == nil then
         Log:debug("heapless sweep skipped: MANURE fill type unresolved -- cannot classify heap targets")
-        return
+        return 0
     end
     local warned = 0
     for _, placeable in ipairs(placeables) do
@@ -385,11 +331,11 @@ local function warnHeaplessHusbandries(deps)
             warned = warned + 1
         end
     end
-    notifyNoHeap(warned, deps)
+    Log:trace("<<< warnHeaplessHusbandries = %d", warned)
+    return warned
 end
 
----Server-only post-load / on-demand pass: wire ALL our husbandry<->heap pairs, then warn per wired
---- heap-less husbandry. Idempotent -- safe to run every load and on demand.
+---Server-only post-load pass: wire all our husbandry<->heap pairs, then log heap-less ones (no toast).
 ---@param deps table|nil injectable collaborators (defaults to the live game)
 function RmHeapConnector.reconnectAll(deps)
     if not RmHeapConnector.isServer() then
@@ -397,7 +343,9 @@ function RmHeapConnector.reconnectAll(deps)
     end
     local pairsWired, heapCount = wireAllHeaps(nil, deps)
     Log:info("reconnect: wired %d husbandry<->heap pair(s) across %d manure heap(s)", pairsWired, heapCount)
-    warnHeaplessHusbandries(deps)
+    local warned = warnHeaplessHusbandries(deps)
+    Log:debug("reconnect: %d heap-less husbandr%s logged, no on-screen notification at load",
+        warned, warned == 1 and "y" or "ies")
 end
 
 ---Server-only scoped pass for one husbandry (appended onFinalizePlacement): pull in existing
@@ -477,7 +425,7 @@ end
 
 ---SAVEGAME_LOADED handler: fired AFTER all savegame placeables (husbandries + heaps) have loaded,
 --- and published only on the server. Marks the game loaded so post-load fresh placements may warn,
---- then runs the server backstop reconnect + the coalesced heap-less warning sweep. `deps` is the
+--- then runs the server backstop reconnect + the log-only heap-less warning sweep. `deps` is the
 --- injectable-collaborator table; the live message publishes with NO args, so it
 --- fires this with deps=nil -> the live game. The suite passes fakes to drive the pass.
 ---@param deps table|nil
@@ -486,9 +434,7 @@ function RmHeapConnector.onSavegameLoaded(self, deps)
     RmHeapConnector.reconnectAll(deps)
 end
 
----PlaceableHusbandry:onFinalizePlacement (APPENDED, after base): scoped reconnect for a just-placed
---- husbandry. Runs AFTER RmStrawSink's prepended finalize builds the station AND base finalize
---- registers it into the extendable pool -- so the station is discoverable by the range query.
+---Appended husbandry onFinalizePlacement: scoped reconnect, once the station exists and is found in range.
 ---@param self table the placeable
 local function onHusbandryFinalizePlacement(self)
     RmHeapConnector.reconnectHusbandry(self)
@@ -508,7 +454,7 @@ local function onManureHeapDelete(_, deps)
     if not RmHeapConnector.savegameLoaded then
         return -- teardown heap-deletes during BaseMission.delete must not sweep
     end
-    warnHeaplessHusbandries(deps)
+    notifyNoHeap(warnHeaplessHusbandries(deps), deps)
 end
 
 ---PlaceableManureHeap:onFinalizePlacement (APPENDED, after base): the re-arm HARDENING. Base
@@ -527,7 +473,7 @@ local function onManureHeapFinalize(_, deps)
     if not RmHeapConnector.savegameLoaded then
         return -- during-load finalizes: the post-load sweep arms the state
     end
-    warnHeaplessHusbandries(deps)
+    notifyNoHeap(warnHeaplessHusbandries(deps), deps)
 end
 
 ---BaseMission.loadMapFinished append: reset the per-load flag and subscribe the post-load pass
@@ -565,20 +511,16 @@ RmHeapConnector.isOurWiredHusbandry = isOurWiredHusbandry
 RmHeapConnector.connectedHeapCount = connectedHeapCount
 RmHeapConnector.wireHeapToOurStations = wireHeapToOurStations
 -- The two appended manure-heap hook bodies (server + savegameLoaded gated), exposed so the suite
--- drives them directly -- they are the slice's distinguishing hardening (delete re-sweep + re-arm).
+-- drives them directly.
 RmHeapConnector.onManureHeapDelete = onManureHeapDelete
 RmHeapConnector.onManureHeapFinalize = onManureHeapFinalize
 
 -- ============================================================================
 -- INSTALL (top-level, guarded once per process)
 --
--- Husbandry onFinalizePlacement is APPENDED so it runs AFTER RmStrawSink's prepended finalize (which
--- builds the station) and base finalize (which registers it into the extendable pool). The
--- PlaceableManureHeap hooks are guarded on the spec class (and each event) existing -- absent if no
--- base/DLC heap type is loaded. onDelete re-sweeps a husbandry that lost its last heap; the appended
--- onFinalizePlacement is the re-arm hardening. The map-start reconnect + warning sweep run from the
--- SAVEGAME_LOADED subscription set up in onLoadMapFinished (loadMapFinished is too early -- terrain
--- init, before placeables load). Guarded once so re-sourcing during testing cannot double-wrap.
+-- Husbandry finalize is appended so the station already exists and is found in range. The heap
+-- hooks install only when a heap type is loaded. The load-time pass runs from the SAVEGAME_LOADED
+-- subscription. Guarded once so re-sourcing during testing cannot double-wrap.
 -- ============================================================================
 
 if not RmHeapConnector.installed then
