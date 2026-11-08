@@ -51,6 +51,7 @@ Changelog:
 
     <iconFilename>icon_manureForAll.dds</iconFilename>
     <multiplayer supported="true"/>
+    <l10n filenamePrefix="languages/l10n"/>
 
     <extraSourceFiles>
         <sourceFile filename="scripts/main.lua"/>

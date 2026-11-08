@@ -153,7 +153,22 @@ local function applyFoodroute(self)
     local origAdd = tgt.addFillLevelFromTool
     local origFree = tgt.getFreeCapacity
 
+    ---True when the fill type is straw and the pen's manure production is switched off,
+    --- so the food point refuses it.
+    ---@param fillTypeIndex integer|nil the fill type being tipped
+    ---@return boolean refused
+    local function strawRefused(fillTypeIndex)
+        if fillTypeIndex == straw and RmPenSwitch.isDisabled(self) then
+            Log:trace("foodroute: '%s' is switched off - straw refused", tostring(self.typeName))
+            return true
+        end
+        return false
+    end
+
     tgt.getIsFillTypeAllowed = function(s, fillTypeIndex, ...)
+        if strawRefused(fillTypeIndex) then
+            return false
+        end
         if fillTypeIndex == straw and station() ~= nil then
             return true
         end
@@ -161,6 +176,9 @@ local function applyFoodroute(self)
     end
 
     tgt.getFreeCapacity = function(s, fillTypeIndex, farmId, ...)
+        if strawRefused(fillTypeIndex) then
+            return 0
+        end
         local st = station()
         if fillTypeIndex == straw and st ~= nil then
             -- Forward farmId: the station treats a nil farm as access-blind, so dropping it
@@ -171,6 +189,9 @@ local function applyFoodroute(self)
     end
 
     tgt.addFillLevelFromTool = function(s, farmId, delta, fillTypeIndex, ...)
+        if strawRefused(fillTypeIndex) then
+            return 0
+        end
         local st = station()
         if fillTypeIndex == straw and st ~= nil then
             -- The straw station asserts 0 <= delta; a nil/negative/non-finite delta (e.g. from

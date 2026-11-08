@@ -13,6 +13,7 @@ In the base game only cows, pigs and horses turn straw bedding into manure. Manu
 - **Right-sized straw storage** - each mod-enabled husbandry gets its own straw storage, sized to its food capacity (at least ~8000 L), so the straw bar fits the barn
 - **Manure out at a heap** - produced manure is delivered to a player-placed manure heap near the husbandry
 - **Honest warnings** - a log warning when a producing husbandry has no manure heap in range, plus an on-screen notice when you place a husbandry without one or remove its last heap, so manure is never lost silently
+- **Switch it off per building** - turn manure production off for any animal building; it then uses no straw, makes no manure and loses no productivity for lack of straw
 - **Per-animal scaling** - straw use and manure output scale per animal from its food needs; map- and mod-added animals are covered automatically
 - **Plays nice with others** - animals that already produce manure (cow, pig, horse) and mods that define their own production (e.g. RealisticLivestock) are never overridden
 - **Multiplayer** - tested on host, client, and dedicated server
@@ -32,10 +33,13 @@ In the base game only cows, pigs and horses turn straw bedding into manure. Manu
 2. Tip bulk straw at the husbandry's food point (or its own straw tip point where one exists)
 3. Animals consume the straw over time and manure accumulates in the heap
 
+To turn manure production off for an animal building, open the in-game menu, go to **Settings** > **Game Settings**, and select the **Manure production** button in the **Manure production per animal building** row under **Manure For All**. Untick the buildings to switch off and confirm with **OK**. In multiplayer only the admin can change this.
+
 ## Limitations
 
 - A manure heap must be placed within range of the husbandry; without one, produced manure is discarded every hour (the mod warns about this when placing the husbandry and in the log)
 - Straw must be tipped as loose material - the food point has no bale trigger
+- A switched-off building that has its own straw tip point still accepts straw there; it is stored and used once manure production is switched back on
 - On dedicated servers the "no heap in range" warning is written to the server log only (no on-screen client notification)
 
 ## Compatibility

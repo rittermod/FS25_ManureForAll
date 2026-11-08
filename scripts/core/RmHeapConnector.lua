@@ -294,6 +294,12 @@ local function warnIfHeapless(husbandry, manure)
     if h == nil then
         return false -- defense-in-depth: callers gate via isOurWiredHusbandry, but never nil-deref here
     end
+    if RmPenSwitch.isDisabled(husbandry) then
+        -- A switched-off pen makes no manure; clearing the flag re-arms the warning for re-enable.
+        husbandry[NOHEAP_WARNED] = nil
+        Log:trace("warnIfHeapless: '%s' is switched off - no warning", tostring(husbandry.typeName))
+        return false
+    end
     if connectedHeapCount(h.unloadingStation, h.storage, manure) ~= 0 then
         husbandry[NOHEAP_WARNED] = nil -- re-arm: manure is being collected again, clear any prior warning
         return false
@@ -366,14 +372,33 @@ function RmHeapConnector.reconnectHusbandry(husbandry, deps)
         Log:info("reconnect: husbandry '%s' picked up %d in-range heap(s) at placement",
             tostring(husbandry:getName()), pairsWired)
     end
-    if RmHeapConnector.savegameLoaded then
-        -- Resolve for the scoped warn; wireAllHeaps above already WARNINGed when MANURE is
-        -- unresolved, so an unclassifiable world just skips the warn (never a false loss warning).
-        local manure = RmHeapConnector.resolveManure()
-        if manure ~= nil and warnIfHeapless(husbandry, manure) then
+    RmHeapConnector.checkHeapNow(husbandry, deps)
+end
+
+---Server-only no-heap check for one wired husbandry; a no-op before the savegame has loaded.
+---@param husbandry table the placeable
+---@param deps table|nil injectable collaborators (defaults to the live game)
+---@param silent boolean|nil true: log-warn only; the caller shows one toast for its whole batch
+---@return boolean warned
+function RmHeapConnector.checkHeapNow(husbandry, deps, silent)
+    if not RmHeapConnector.isServer() or not RmHeapConnector.savegameLoaded then
+        return false
+    end
+    if not isOurWiredHusbandry(husbandry) then
+        return false
+    end
+    -- An unresolvable MANURE index skips the warn (never a false loss warning).
+    local manure = RmHeapConnector.resolveManure()
+    if manure ~= nil and warnIfHeapless(husbandry, manure) then
+        Log:debug("checkHeapNow: '%s' has no heap in range - warned", tostring(husbandry:getName()))
+        if silent then
+            Log:trace("checkHeapNow: toast left to the caller")
+        else
             notifyNoHeap(1, deps)
         end
+        return true
     end
+    return false
 end
 
 -- ============================================================================
@@ -430,6 +455,8 @@ end
 --- fires this with deps=nil -> the live game. The suite passes fakes to drive the pass.
 ---@param deps table|nil
 function RmHeapConnector.onSavegameLoaded(self, deps)
+    -- Switched-off flags must be set before the no-heap sweep, whatever the subscription order.
+    RmPenSwitch.loadDisabledSet()
     RmHeapConnector.savegameLoaded = true
     RmHeapConnector.reconnectAll(deps)
 end
@@ -514,6 +541,8 @@ RmHeapConnector.wireHeapToOurStations = wireHeapToOurStations
 -- drives them directly.
 RmHeapConnector.onManureHeapDelete = onManureHeapDelete
 RmHeapConnector.onManureHeapFinalize = onManureHeapFinalize
+-- One coalesced toast for a caller that batched silent checkHeapNow calls (the pen switch).
+RmHeapConnector.notifyNoHeap = notifyNoHeap
 
 -- ============================================================================
 -- INSTALL (top-level, guarded once per process)

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!--
+    RmPenSelectorDialog.xml - turn manure production on or off per animal building: one row per
+    building with its name, animal type, owner farm and a checkbox (ticked = on). Profiles live
+    in gui/guiProfiles.xml.
+-->
+<GUI onOpen="onOpen" onClose="onClose" onCreate="onCreate">
+    <GuiElement profile="newLayer"/>
+    <Bitmap profile="dialogFullscreenBg" id="dialogBg"/>
+    <GuiElement profile="fs25_dialogBg" id="dialogElement" size="1000px 720px">
+        <ThreePartBitmap profile="fs25_dialogBgMiddle"/>
+        <ThreePartBitmap profile="fs25_dialogBgTop"/>
+        <ThreePartBitmap profile="fs25_dialogBgBottom"/>
+        <GuiElement profile="fs25_dialogContentContainer">
+
+            <Text profile="fs25_dialogTitle" id="dialogTitleElement"
+                  position="0px -30px"
+                  text="$l10n_rm_mfa_pens_title"/>
+
+            <Text profile="rmMfa_dialogHelp" id="dialogHelpText"
+                  position="0px -75px" size="880px 40px"
+                  text="$l10n_rm_mfa_pens_help"/>
+
+            <SmoothList profile="rmMfa_penList" id="penList"
+                        position="50px -125px"
+                        size="870px 470px"
+                        focusInit="onOpen"
+                        focusChangeTop="nil"
+                        focusChangeBottom="nil"
+                        onClick="onListClick">
+                <ListItem profile="rmMfa_penListItem" name="defaultCell">
+                    <Text profile="rmMfa_penName" position="10px 0px" size="330px 55px" name="name"/>
+                    <Text profile="rmMfa_penText" position="350px 0px" size="200px 55px" name="animalType"/>
+                    <Text profile="rmMfa_penText" position="560px 0px" size="180px 55px" name="farm"/>
+                    <Text profile="rmMfa_penStatus" position="-15px 0px" size="110px 55px" name="status"/>
+                    <Button profile="rmMfa_checkboxButton" name="checkbox">
+                        <ThreePartBitmap profile="rmMfa_checkboxBox"/>
+                        <Bitmap profile="rmMfa_checkbox" name="check"/>
+                    </Button>
+                </ListItem>
+            </SmoothList>
+
+            <ThreePartBitmap profile="fs25_listSliderBox" id="penSliderBox"
+                             position="-30px -17px"
+                             size="12px 470px">
+                <Slider profile="fs25_listSlider" size="6px 462px" dataElementId="penList"/>
+            </ThreePartBitmap>
+
+        </GuiElement>
+
+        <BoxLayout profile="fs25_dialogButtonBox" id="buttonsPC">
+            <Button profile="buttonSelect" text="$l10n_button_select"
+                    onClick="onClickSelect" id="selectButton"/>
+            <Bitmap profile="fs25_dialogButtonBoxSeparator"/>
+            <Button profile="buttonMenuSwitch" text="$l10n_button_selectAll"
+                    onClick="onClickSelectAll" id="selectAllButton"/>
+            <Bitmap profile="fs25_dialogButtonBoxSeparator"/>
+            <Button profile="buttonOK" text="$l10n_button_ok"
+                    onClick="onClickOk" id="okButton"/>
+            <Bitmap profile="fs25_dialogButtonBoxSeparator"/>
+            <Button profile="buttonBack" text="$l10n_button_back"
+                    onClick="onClickBack" id="backButton"/>
+        </BoxLayout>
+    </GuiElement>
+</GUI>

@@ -12,8 +12,8 @@
     the AnimCurves lives in core/RmCurveInjector.lua, which consumes the tables and
     functions exposed here.
 
-    Loaded by scripts/main.lua before RmCurveInjector (the only hard load-time
-    dependency is rmlib's logger).
+    Loaded by scripts/main.lua before RmCurveInjector. It references no other module
+    at load time.
 
     Author: Ritter
 ]]

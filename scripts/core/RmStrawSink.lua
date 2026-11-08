@@ -1144,11 +1144,11 @@ function RmStrawSink.dumpSinks()
         -- broken link presents as, and the reason a coop can look healthy and make no manure.
         local isSource = storageIsLoadingSource(spec)
         Log:info(
-            "dump: %s #%d -- storage=%s unloading=%s loading=%s wired=%s source=%s farm=%s | "
+            "dump: %s #%d -- storage=%s unloading=%s loading=%s wired=%s enabled=%s source=%s farm=%s | "
                 .. "STRAW supported=%s level=%.0f cap=%.0f | MANURE supported=%s level=%.0f cap=%.0f",
             tostring(placeable.typeName), index,
             tostring(spec.storage ~= nil), tostring(spec.unloadingStation ~= nil), tostring(spec.loadingStation ~= nil),
-            tostring(isWired), tostring(isSource), tostring(farmId),
+            tostring(isWired), tostring(not RmPenSwitch.isDisabled(placeable)), tostring(isSource), tostring(farmId),
             tostring(placeable:getHusbandryIsFillTypeSupported(straw)),
             placeable:getHusbandryFillLevel(straw, farmId) or 0, placeable:getHusbandryCapacity(straw, farmId) or 0,
             tostring(placeable:getHusbandryIsFillTypeSupported(manure)),
@@ -1258,6 +1258,10 @@ function RmStrawSink.addStraw(litersArg, indexArg)
             return string.format(
                 "mfaAddStraw: husbandry #%d is not wired (no straw sink) -- nothing added", wantIndex)
         end
+        if RmPenSwitch.isDisabled(target) then
+            return string.format(
+                "mfaAddStraw: husbandry #%d has manure production switched off -- nothing added", wantIndex)
+        end
         local moved = depositInto(target, wantIndex)
         if moved < 0 then
             return string.format(
@@ -1270,7 +1274,9 @@ function RmStrawSink.addStraw(litersArg, indexArg)
     -- No index: fan out to EVERY wired husbandry, depositing `liters` into each.
     local wiredCount, totalMoved = 0, 0
     local ok, errText = forEachHusbandry(function(placeable, spec, index)
-        if isModWired(spec) then
+        if isModWired(spec) and RmPenSwitch.isDisabled(placeable) then
+            Log:debug("add: husbandry #%d is switched off -- skipped", index)
+        elseif isModWired(spec) then
             wiredCount = wiredCount + 1
             local moved = depositInto(placeable, index)
             if moved > 0 then

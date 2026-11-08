@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!--
+    guiProfiles.xml - every ManureForAll GUI profile, loaded once before the pen dialog.
+    Traits sit on profiles only; the GUI loader ignores an element-level with=.
+-->
+<GUIProfiles>
+    <Profile name="rmMfa_penList" extends="emptyPanel" with="anchorStretchingYLeft pivotTopLeft">
+    </Profile>
+
+    <Profile name="rmMfa_penListItem" extends="baseReference" with="anchorTopStretchingX alternating">
+        <height value="55px"/>
+        <imageColor value="$preset_fs25_colorGrey"/>
+        <imageSelectedColor value="$preset_fs25_colorMainHighlight"/>
+        <alternateBackgroundColor value="$preset_fs25_colorGreyDark_50"/>
+    </Profile>
+
+    <Profile name="rmMfa_penText" extends="baseReference" with="anchorMiddleLeft">
+        <textSize value="17px"/>
+        <textAlignment value="left"/>
+        <textMaxNumLines value="1"/>
+        <textLayoutMode value="resize"/>
+        <textColor value="$preset_fs25_colorMainLight"/>
+        <textSelectedColor value="$preset_fs25_colorMainDark"/>
+        <!-- Unavailable rows set the texts disabled; the disabled colour outranks every state. -->
+        <textDisabledColor value="$preset_colorDisabled"/>
+    </Profile>
+
+    <Profile name="rmMfa_penName" extends="rmMfa_penText">
+        <textBold value="true"/>
+    </Profile>
+
+    <!-- Unavailable rows: greyed in every state, the selected ones included. -->
+    <Profile name="rmMfa_penTextUnavailable" extends="rmMfa_penText">
+        <textColor value="$preset_colorDisabled"/>
+        <textSelectedColor value="$preset_colorDisabled"/>
+        <textFocusedSelectedColor value="$preset_colorDisabled"/>
+        <textHighlightedSelectedColor value="$preset_colorDisabled"/>
+    </Profile>
+
+    <Profile name="rmMfa_penStatus" extends="rmMfa_penTextUnavailable" with="anchorMiddleRight">
+        <textAlignment value="right"/>
+    </Profile>
+
+    <Profile name="rmMfa_dialogHelp" extends="baseReference" with="anchorTopCenter">
+        <textSize value="16px"/>
+        <textAlignment value="center"/>
+        <textMaxNumLines value="2"/>
+        <textColor value="$preset_fs25_colorMainLight"/>
+    </Profile>
+
+    <Profile name="rmMfa_checkboxButton" extends="buttonBase" with="anchorTopRight">
+        <width value="25px"/>
+        <position value="-45px -15px"/>
+        <imageColor value="$preset_colorTransparent"/>
+    </Profile>
+
+    <Profile name="rmMfa_checkboxBox" extends="emptyPanel">
+        <imageSliceId value="ui_elements.square_center"/>
+        <imageColor value="$preset_fs25_colorMainHighlight"/>
+        <imageSelectedColor value="$preset_colorRed"/>
+        <imageHighlightedColor value="$preset_fs25_colorMainHighlight"/>
+        <imageFocusedColor value="$preset_fs25_colorMainHighlight"/>
+        <startImageSize value="5px"/>
+        <startImageSliceId value="ui_elements.square_left"/>
+        <startImageColor value="$preset_fs25_colorMainHighlight"/>
+        <startImageSelectedColor value="$preset_colorRed"/>
+        <endImageSize value="5px"/>
+        <endImageSliceId value="ui_elements.square_right"/>
+        <endImageColor value="$preset_fs25_colorMainHighlight"/>
+        <endImageSelectedColor value="$preset_colorRed"/>
+    </Profile>
+
+    <!-- Settings-page button: the cloned pause-button row, without its pause icon. -->
+    <Profile name="rmMfa_settingsButton" extends="emptyPanel" with="anchorMiddleRight">
+        <size value="280px 32px"/>
+        <position value="-10px 0px"/>
+        <focusOnHighlight value="true"/>
+        <textResizeWidth value="200px"/>
+        <textSize value="16px"/>
+        <iconColor value="$preset_colorTransparent"/>
+        <iconFocusedColor value="$preset_colorTransparent"/>
+        <iconHighlightedColor value="$preset_colorTransparent"/>
+        <iconTextOffset value="0px -1px"/>
+        <textBold value="true"/>
+        <textUpperCase value="true"/>
+        <textAlignment value="center"/>
+        <textColor value="$preset_fs25_colorMainLight"/>
+        <textFocusedColor value="$preset_fs25_colorMainDark"/>
+        <textDisabledColor value="$preset_colorDisabled"/>
+    </Profile>
+
+    <Profile name="rmMfa_checkbox" extends="buttonBase">
+        <imageSliceId value="gui.tick"/>
+        <imageColor value="$preset_fs25_colorMainHighlight"/>
+        <imageSelectedColor value="$preset_colorRed"/>
+        <position value="3px 0px"/>
+    </Profile>
+</GUIProfiles>

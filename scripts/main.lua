@@ -8,7 +8,7 @@
     IMPORTANT: This file is a LOADER ONLY.
     ============================================================
     - It loads dependencies via source() in the correct order
-    - All mod logic belongs in scripts/RmManureForAll.lua
+    - Feature logic lives in scripts/core/, scripts/events/ and scripts/gui/
     - Do NOT add module definitions (ManureForAll = {}) here
     - Do NOT add business logic or game hooks here
     ============================================================
@@ -43,6 +43,12 @@ source(modDirectory .. "scripts/core/RmSpecInjector.lua")
 source(modDirectory .. "scripts/core/RmStrawSink.lua")
 source(modDirectory .. "scripts/core/RmTroughDivert.lua")
 source(modDirectory .. "scripts/core/RmHeapConnector.lua")
+source(modDirectory .. "scripts/core/RmPenSwitch.lua")
+source(modDirectory .. "scripts/events/RmPenSwitchStateEvent.lua")
+source(modDirectory .. "scripts/events/RmPenSwitchRequestEvent.lua")
+source(modDirectory .. "scripts/gui/RmPenSelectorModel.lua")
+source(modDirectory .. "scripts/gui/RmPenSelectorDialog.lua")
+source(modDirectory .. "scripts/gui/RmMfaSettingsPage.lua")
 source(modDirectory .. "scripts/console/RmManureConsole.lua")
 
 -- =============================================================================

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<l10n>
+    <texts>
+        <text name="rm_mfa_settings_section" text="Manure For All"/>
+        <text name="rm_mfa_settings_pens" text="Manure production per animal building"/>
+        <text name="rm_mfa_settings_pens_tooltip" text="Choose which animal buildings use straw and produce manure"/>
+        <text name="rm_mfa_pens_title" text="Manure production"/>
+        <text name="rm_mfa_pens_help" text="Untick an animal building to turn its manure production off. It then uses no straw and makes no manure."/>
+        <text name="rm_mfa_pens_off" text="Off"/>
+    </texts>
+</l10n>
