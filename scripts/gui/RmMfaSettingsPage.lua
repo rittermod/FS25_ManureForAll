@@ -82,7 +82,9 @@ local function buildRows(page, layout)
     end
     local header = headerTemplate:clone(layout)
     header:setText(text("rm_mfa_settings_section"))
-    local row = rowTemplate:clone(layout)
+    -- The template is the Pause Game row, the page's open focus: register the clone only after
+    -- its button drops that flag, or it takes the page's open-focus slot.
+    local row = rowTemplate:clone(layout, false, false, true)
     local buttons, label = {}, nil
     for _, element in ipairs(row.elements) do
         if element.typeName == "Button" then
@@ -106,11 +108,14 @@ local function buildRows(page, layout)
     button.focused = false
     button.onClickCallback = RmMfaSettingsPage.onClickOpen
     if tooltipTemplate ~= nil then
-        local tooltip = tooltipTemplate:clone(button)
+        local tooltip = tooltipTemplate:clone(button, false, false, true)
         tooltip:setText(text("rm_mfa_settings_pens_tooltip"))
     else
         Log:warning("RmMfaSettingsPage: no tooltip template - the settings button has no tooltip")
     end
+    row:reloadFocusHandling(true)
+    Log:debug("RmMfaSettingsPage: row registered for focus (button focusId=%s, open focus=%s)",
+        tostring(button.focusId), tostring(button.isAlwaysFocusedOnOpen))
     page.rmMfaPensButton = button
     layout:invalidateLayout()
     return true
