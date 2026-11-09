@@ -1,15 +1,22 @@
 # Changelog
 
-## 1.0.1.0 (Stable - 2026-08-28):
+## 1.1.0.0-dev.1:
+- Added a game settings button that turns manure production off for individual animal buildings, so they use no straw and make no manure
+- Fixed animal buildings the mod could not fit with straw storage showing an empty straw bar and losing productivity
+
+## 1.0.2.0-dev.1:
+- Removed the on-screen "no manure heap in range" warning that appeared on every savegame load; the warning stays in the log, and the on-screen notice still appears when you place an animal building without a heap or remove its last heap
+
+## 1.0.1.0:
 - Fixed animal buildings whose straw bar filled to the top but never produced any manure
 - Fixed animal buildings that never got a straw storage, so they could not produce manure
 
-## 1.0.0.0 (Stable - 2026-07-18):
+## 1.0.0.0:
 - Changed from Alpha to Stable
 - Changed straw capacity on mod-enabled coops to scale with the coop's food capacity, so small coops no longer show an oversized straw bar
 - Changed debug logging to be off during normal play in production builds
 
-## 0.2.0.0 (Alpha - 2026-07-05):
+## 0.2.0.0 (Alpha):
 - Added the first public alpha release
 - Added straw bedding consumption and collectable manure production to all husbandries, regardless of animal type
 - Added bulk straw tipping at a husbandry's food point when the husbandry has no straw tip point

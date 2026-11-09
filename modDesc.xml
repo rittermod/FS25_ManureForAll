@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="115">
     <author>Ritter</author>
-    <version>1.0.2.0-dev.1</version>
+    <version>1.1.0.0-dev.1</version>
     <title>
         <en>Manure For All</en>
     </title>
@@ -27,25 +27,18 @@ Limitations: without a heap in range, produced manure is discarded hourly (with 
 Documentation: https://github.com/rittermod/FS25_ManureForAll
 
 Changelog:
-1.0.1.0 (Stable - 2026-08-28):
+1.1.0.0-dev.1:
+- Added a game settings button that turns manure production off for individual animal buildings, so they use no straw and make no manure
+- Fixed animal buildings the mod could not fit with straw storage showing an empty straw bar and losing productivity
+
+1.0.1.0:
 - Fixed animal buildings whose straw bar filled to the top but never produced any manure
 - Fixed animal buildings that never got a straw storage, so they could not produce manure
 
-1.0.0.0 (Stable - 2026-07-18):
+1.0.0.0:
 - Changed from Alpha to Stable
 - Changed straw capacity on mod-enabled coops to scale with the coop's food capacity, so small coops no longer show an oversized straw bar
 - Changed debug logging to be off during normal play in production builds
-
-0.2.0.0 (Alpha - 2026-07-05):
-- Added the first public alpha release
-- Added straw bedding consumption and collectable manure production to all husbandries, regardless of animal type
-- Added bulk straw tipping at a husbandry's food point when the husbandry has no straw tip point
-- Added delivery of produced manure to a player-placed manure heap near the husbandry
-- Added an on-screen and log warning when a producing husbandry has no manure heap in range, so manure is never lost silently
-- Added per-animal scaling of straw use and manure output from each animal's food needs, covering map- and mod-added animals automatically
-- Kept animals that already produce manure (cow, pig, horse) and mods that define their own production (e.g. RealisticLivestock) untouched
-- Kept the existing straw intake on husbandries that already have one, never adding a second straw path
-- Added multiplayer support, tested on host, client, and dedicated server
         ]]>        </en>
     </description>
 

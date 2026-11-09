@@ -37,7 +37,7 @@ local NOHEAP_WARNED = "rmNoHeapWarned" -- one-time no-heap warning flag, set on 
 -- ENGINE / REGISTRY SEAMS
 --
 -- Read INDIRECTLY through the module table so the in-game suite can point them at fakes to drive
--- the reconnect passes WITHOUT reassigning the engine globals. Ritter convention: the FS25
+-- the reconnect passes WITHOUT reassigning the engine globals. Test convention: the FS25
 -- mod sandbox (setfenv) makes a bare `g_xxx = nil` a no-op
 -- (the read falls through __index to the still-present real global), and mutating the LIVE
 -- g_server / g_dedicatedServer mid-game is unsafe -- so the server / dedicated-server GATES read

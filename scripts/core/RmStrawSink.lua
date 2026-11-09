@@ -916,8 +916,9 @@ local function husbandryOnFinalizePlacement(self)
         recomputeAnimalRates(self)
 
         -- Only the leading verb varies: `augmented` reproduces this line BYTE-IDENTICALLY to what
-        -- it emitted before this ticket, so anything already keyed on it keeps matching, and
-        -- `built` is the same lower-case vocabulary the station halves use later on the line. The
+        -- it emitted before the built-storage path was added, so anything already keyed on it
+        -- keeps matching, and `built` is the same lower-case vocabulary the station halves use
+        -- later on the line. The
         -- CLEAN-SLATE shape has its own separate line at the bottom of this function -- keeping
         -- this one's distinct opening is what stops a log scan conflating the two.
         Log:info("%s central storage for %s '%s' (added %s; unloadingStation %s; loadingStation %s)",
