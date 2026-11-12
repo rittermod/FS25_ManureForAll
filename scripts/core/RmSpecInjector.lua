@@ -1,30 +1,22 @@
 --[[
     RmSpecInjector.lua
 
-    The type half of the straw wiring -- inject the husbandryStraw specialization onto every
-    strawless food-bearing husbandry TYPE, and own the `injectedTypes` set that is the
-    single source of truth aligning inject-, build-, and warn-scope.
+    The type half of the straw wiring: inject the husbandryStraw specialization onto every
+    strawless food-bearing husbandry TYPE, and own the `injectedTypes` set that aligns
+    inject-, build- and warn-scope.
 
-    A strawless husbandry (any type/animal -- sheep, all pasture variants, chicken,
-    modded) declares no straw producer, so nothing reads straw and no manure is made.
-    This module supplies the missing husbandryStraw spec at type-validation time; the
-    instance-level Storage + stations that make it collectable are built by RmStrawSink
-    (the instance half), keyed off the set this module records.
+    A strawless husbandry (sheep, pasture variants, chicken, modded) has no straw producer,
+    so no manure is made. This module adds the spec at type-validation time; RmStrawSink
+    builds the instance-level Storage and stations from the set recorded here.
 
-    STRUCTURAL predicate -- NO literal type name: a type qualifies iff it carries the
-    `husbandry` + `husbandryFood` specs (it IS an animal-feeding husbandry) and LACKS
-    `husbandryStraw` (it has no native straw producer). Barns / native-straw types are
-    excluded by the lacks-husbandryStraw clause and never enter the injected set.
+    STRUCTURAL predicate, no literal type name: a type qualifies iff it carries `husbandry`
+    + `husbandryFood` and LACKS `husbandryStraw`. That clause excludes native-straw barns and
+    doubles as the dup guard: a type given the spec natively, or by another mod's earlier
+    validateTypes hook, is skipped, so addSpecialization never errors "already exists".
 
-    Injecting an abstract parent is INERT: the engine resolves inheritance when a child
-    type is registered (the child copies its parent's spec list at that point), which
-    happens BEFORE this validateTypes prepend runs -- so injecting onto an abstract
-    parent never propagates to its children. Coverage is genuinely per-concrete-type:
-    each strawless type must independently match the predicate. The lacks-husbandryStraw
-    clause also doubles as the dup guard (a type carrying the spec natively is skipped, so
-    addSpecialization never errors "already exists"). Load-order caveat: a mod-added
-    husbandry type registered AFTER our prepend is not covered that load (re-derived
-    every load).
+    Injecting an abstract parent is INERT (it never reaches child types), so each concrete
+    type must match on its own. A type that a later-loading mod adds from its own appended
+    validateTypes hook is not covered that load.
 
     Runs per-peer (never server-gated) so clients build the same type shape as the host.
 
@@ -41,7 +33,7 @@ RmSpecInjector = RmSpecInjector or {}
 -- predicate excludes it), so it is never built on -- no double-wire.
 --
 -- Lifetime: RESET on map unload (the BaseMission.delete append below), NOT at the top of
--- injectStraw. The engine wipes its registered types every unload, so the set must be
+-- injectStraw. Types are registered afresh on every map load, so the set must be
 -- per-map too -- a teardown reset keeps it aligned without staleness across a
 -- return-to-menu + reload. It is NOT cleared inside injectStraw so that in-load
 -- accumulation stays correct even if validateTypes ever runs twice in one load (a mid-load
@@ -57,9 +49,9 @@ local SPEC_NAME = "husbandryStraw"
 -- ============================================================================
 -- SPEC INJECTION
 --
--- Prepended to TypeManager.validateTypes (runs before types are finalized) so
--- husbandryStraw is on every strawless husbandry type when instances are built.
--- Idempotent; runs per-peer.
+-- Appended to TypeManager.validateTypes, as specialization injection should be: every type
+-- is registered there and none is finalized yet, so husbandryStraw is on every strawless
+-- husbandry type when instances are built. Idempotent; runs per-peer.
 -- ============================================================================
 
 ---True if a type ENTRY is a strawless, food-bearing husbandry we should inject onto:
@@ -115,8 +107,8 @@ end
 -- LIFECYCLE
 -- ============================================================================
 
----BaseMission.delete append: RESET the injected-type set on map unload (the engine wipes
---- its registered types too, so the set is per-map). Replaces the prototype's deleteMap reset.
+---BaseMission.delete append: RESET the injected-type set on map unload, since types are
+--- registered afresh on every map load.
 local function onDeleteMap()
     RmSpecInjector.injectedTypes = {}
 end
@@ -134,7 +126,7 @@ RmSpecInjector.injectStraw = injectStraw
 -- ============================================================================
 
 if not RmSpecInjector.installed then
-    TypeManager.validateTypes = Utils.prependedFunction(TypeManager.validateTypes, injectStraw)
+    TypeManager.validateTypes = Utils.appendedFunction(TypeManager.validateTypes, injectStraw)
     BaseMission.delete = Utils.appendedFunction(BaseMission.delete, onDeleteMap)
     RmSpecInjector.installed = true
 end
