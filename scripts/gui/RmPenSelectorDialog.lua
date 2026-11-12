@@ -1,10 +1,9 @@
 --[[
     RmPenSelectorDialog.lua
 
-    Pen dialog: one row per animal building of an injected type, with name, animal type, owner
-    farm and a checkbox (ticked = manure production on). Pens the mod could not set up are greyed
-    and cannot be toggled. Selection logic lives in RmPenSelectorModel; rows come from
-    RmPenSwitch.listPens.
+    Pen dialog: one row per animal building RmPenSwitch.listPens returns, with name, animal type,
+    owner farm and a checkbox (ticked = manure production on). Pens the mod could not set up are
+    greyed and cannot be toggled. Selection logic lives in RmPenSelectorModel.
 
     Author: Ritter
 ]]

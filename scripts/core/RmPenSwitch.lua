@@ -30,6 +30,10 @@ RmPenSwitch.XML_ROOT = "rmManureForAllSettings"
 RmPenSwitch.XML_PEN_KEY = "rmManureForAllSettings.disabledPens.pen"
 -- Neutral text for a dialog column whose source is missing.
 RmPenSwitch.NEUTRAL_LABEL = "-"
+-- Why a pen gets no dialog row; used in the debug and trace lines.
+RmPenSwitch.DROP_UNOWNED = "unowned"
+RmPenSwitch.DROP_NOT_PLAYER_FARM = "not a player farm"
+RmPenSwitch.DROP_OTHER_FARM = "other farm"
 
 -- The four straw functions the gated slot wraps, in registration order.
 local GATED_FUNCTIONS = { "updateOutput", "updateProduction", "getConditionInfos", "updateInfo" }
@@ -49,6 +53,13 @@ local FIELD = RmPenSwitch.DISABLED_FIELD
 ---@return boolean
 function RmPenSwitch.isServer()
     return g_server ~= nil
+end
+
+---Multiplayer seam: true in a multiplayer session, host or client. Suites swap it to pick the mode.
+---@return boolean
+function RmPenSwitch.isMultiplayer()
+    local mission = g_currentMission
+    return mission ~= nil and mission.missionDynamicInfo ~= nil and mission.missionDynamicInfo.isMultiplayer == true
 end
 
 ---Client-side master-rights check (UX only; the server re-checks every request).
@@ -178,13 +189,49 @@ end
 -- DIALOG ROWS
 -- ============================================================================
 
+---Owner farm ID a pen reports, or nil when it reports none.
+---@param placeable table
+---@return integer|nil
+local function ownerFarmIdOf(placeable)
+    local farmId = placeable.getOwnerFarmId ~= nil and placeable:getOwnerFarmId() or nil
+    if type(farmId) ~= "number" then
+        return nil
+    end
+    return farmId
+end
+
+---True for a player farm ID, 1..MAX_NUM_FARMS; owner 0 and the reserved IDs above the cap are not.
+---@param farmId integer|nil
+---@return boolean
+local function isPlayerFarmId(farmId)
+    local maxFarms = FarmManager ~= nil and FarmManager.MAX_NUM_FARMS or 8
+    return type(farmId) == "number" and farmId > 0 and farmId <= maxFarms
+end
+
+---Why a pen with this owner gets no dialog row, or nil when it gets one.
+---@param farmId integer|nil owner farm ID
+---@param isMultiplayer boolean
+---@return string|nil reason one of the RmPenSwitch.DROP_* labels
+local function dropReasonOf(farmId, isMultiplayer)
+    -- Owner 0 is a pen no farm owns: map-preplaced and not bought, or left by a deleted farm.
+    if farmId == FarmManager.SPECTATOR_FARM_ID then
+        return RmPenSwitch.DROP_UNOWNED
+    end
+    if not isPlayerFarmId(farmId) then
+        return RmPenSwitch.DROP_NOT_PLAYER_FARM
+    end
+    if not isMultiplayer and farmId ~= FarmManager.SINGLEPLAYER_FARM_ID then
+        return RmPenSwitch.DROP_OTHER_FARM
+    end
+    return nil
+end
+
 ---Owner farm name by ID: real farms 1..MAX_NUM_FARMS with a farm object, else the neutral label.
 ---@param placeable table
 ---@return string
 local function farmNameOf(placeable)
-    local farmId = placeable.getOwnerFarmId ~= nil and placeable:getOwnerFarmId() or nil
-    local maxFarms = FarmManager ~= nil and FarmManager.MAX_NUM_FARMS or 8
-    if type(farmId) ~= "number" or farmId <= 0 or farmId > maxFarms or g_farmManager == nil then
+    local farmId = ownerFarmIdOf(placeable)
+    if not isPlayerFarmId(farmId) or g_farmManager == nil then
         return RmPenSwitch.NEUTRAL_LABEL
     end
     local farm = g_farmManager:getFarmById(farmId)
@@ -229,7 +276,7 @@ local function rowLess(a, b)
     return a.order < b.order
 end
 
----Rows for the dialog: every placed pen of an injected type, sorted for display.
+---Dialog rows: injected-type pens a player farm owns (farm 1 only in singleplayer), sorted for display.
 ---@param placeables table|nil defaults to the live placeable list
 ---@return table rows array of { placeable, name, animalType, farmName, available, disabled }
 function RmPenSwitch.listPens(placeables)
@@ -239,21 +286,41 @@ function RmPenSwitch.listPens(placeables)
         Log:debug("PENS: no placeable list - 0 rows")
         return rows
     end
+    local isMultiplayer = RmPenSwitch.isMultiplayer()
+    local dropped = {
+        [RmPenSwitch.DROP_UNOWNED] = 0,
+        [RmPenSwitch.DROP_NOT_PLAYER_FARM] = 0,
+        [RmPenSwitch.DROP_OTHER_FARM] = 0,
+    }
+    local droppedTotal = 0
     for index, placeable in ipairs(placeables) do
         if RmPenSwitch.isGated(placeable) and placeable.markedForDeletion ~= true then
-            rows[#rows + 1] = {
-                placeable = placeable,
-                name = nameOf(placeable),
-                animalType = animalTypeOf(placeable),
-                farmName = farmNameOf(placeable),
-                available = RmTroughDivert.isWiredHusbandry(placeable),
-                disabled = RmPenSwitch.isDisabled(placeable),
-                order = index,
-            }
+            local farmId = ownerFarmIdOf(placeable)
+            local reason = dropReasonOf(farmId, isMultiplayer)
+            if reason ~= nil then
+                dropped[reason] = dropped[reason] + 1
+                droppedTotal = droppedTotal + 1
+                Log:trace("listPens: no row for '%s' (%s) - owner farm %s, %s", tostring(nameOf(placeable)),
+                    tostring(RmPenSwitch.uniqueIdOf(placeable)), tostring(farmId), reason)
+            else
+                rows[#rows + 1] = {
+                    placeable = placeable,
+                    name = nameOf(placeable),
+                    animalType = animalTypeOf(placeable),
+                    farmName = farmNameOf(placeable),
+                    available = RmTroughDivert.isWiredHusbandry(placeable),
+                    disabled = RmPenSwitch.isDisabled(placeable),
+                    order = index,
+                }
+            end
         end
     end
     table.sort(rows, rowLess)
-    Log:debug("PENS: %d row(s) for the dialog", #rows)
+    Log:debug("PENS: %d row(s) for the dialog (%s), %d dropped: %d %s, %d %s, %d %s", #rows,
+        isMultiplayer and "multiplayer" or "singleplayer", droppedTotal,
+        dropped[RmPenSwitch.DROP_UNOWNED], RmPenSwitch.DROP_UNOWNED,
+        dropped[RmPenSwitch.DROP_NOT_PLAYER_FARM], RmPenSwitch.DROP_NOT_PLAYER_FARM,
+        dropped[RmPenSwitch.DROP_OTHER_FARM], RmPenSwitch.DROP_OTHER_FARM)
     return rows
 end
 
