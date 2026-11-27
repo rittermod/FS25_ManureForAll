@@ -1,11 +1,9 @@
 # Changelog
 
-## 1.1.0.0-dev.1:
+## 1.1.0.0:
 - Added a game settings button that turns manure production off for individual animal buildings, so they use no straw and make no manure
+- Removed the on-screen "no manure heap in range" warning shown on every savegame load; it still appears when you place an animal building without a heap
 - Fixed animal buildings the mod could not fit with straw storage showing an empty straw bar and losing productivity
-
-## 1.0.2.0-dev.1:
-- Removed the on-screen "no manure heap in range" warning that appeared on every savegame load; the warning stays in the log, and the on-screen notice still appears when you place an animal building without a heap or remove its last heap
 
 ## 1.0.1.0:
 - Fixed animal buildings whose straw bar filled to the top but never produced any manure

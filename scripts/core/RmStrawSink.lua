@@ -166,7 +166,7 @@ local function buildStrawStation(self, rootNode, straw, manure)
     local station = UnloadingStation.new(self.isServer, self.isClient) --[[@as table]]
     station.rootNode = rootNode -- reuse existing node; NO i3d edit, NO triggers
     -- owningPlaceable kept non-nil so station-name lookups stay safe (we set no stationName,
-    -- so the name resolves to nil -- benign; nothing reads the name this slice).
+    -- so the name resolves to nil -- benign; nothing reads the name).
     station.owningPlaceable = self
     station.hasStoragePerFarm = false
     -- Extension-connectable: supportsExtension MUST be set at build time so the station
@@ -199,10 +199,10 @@ local function buildStrawLoadingStation(self, rootNode, straw)
     local station = LoadingStation.new(self.isServer, self.isClient) --[[@as table]]
     station.rootNode = rootNode -- reuse existing node; NO i3d edit, NO triggers
     -- owningPlaceable kept non-nil so station-name lookups stay safe (we set no stationName,
-    -- so the name resolves to nil -- benign; nothing reads the name this slice).
+    -- so the name resolves to nil -- benign; nothing reads the name).
     station.owningPlaceable = self
     station.hasStoragePerFarm = false
-    station.supportsExtension = false -- stay out of base extendable-station pools this slice
+    station.supportsExtension = false -- stay out of base extendable-station pools
     station.sourceStorages = {}
     station.loadTriggers = {} -- seeded empty so trigger-walking station setup stays safe
     station.aiSupportedFillTypes = {}
